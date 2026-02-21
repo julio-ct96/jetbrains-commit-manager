@@ -1,11 +1,12 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
-import { Changelist, FileItem, FileStatus } from './types';
+import * as vscode from 'vscode';
 import { GitService } from './gitService';
+import { Changelist, FileItem, FileStatus } from './types';
 
 export class ChangelistTreeItem extends vscode.TreeItem {
   constructor(public readonly changelist: Changelist, public readonly collapsibleState: vscode.TreeItemCollapsibleState) {
     super(changelist.name, collapsibleState);
+    this.id = `changelist-${changelist.id}`;
     this.tooltip = changelist.description || changelist.name;
     this.description = `${changelist.files.length} files`;
     // Distinguish empty vs non-empty changelists for context menus
@@ -70,6 +71,7 @@ export class FileTreeItem extends vscode.TreeItem {
 export class UnversionedSectionTreeItem extends vscode.TreeItem {
   constructor(public readonly unversionedFiles: FileItem[], collapsibleState: vscode.TreeItemCollapsibleState) {
     super('Unversioned Files', collapsibleState);
+    this.id = 'unversioned-section';
     this.contextValue = 'unversionedSection';
     this.iconPath = undefined; // Remove prefix icon from unversioned files section
     this.description = `${unversionedFiles.length} files`;
@@ -271,6 +273,12 @@ export class NativeTreeProvider
     return null;
   }
 
+  private getCollapsibleState(changelist: Changelist): vscode.TreeItemCollapsibleState {
+    if (changelist.files.length === 0) return vscode.TreeItemCollapsibleState.None;
+    if (changelist.isExpanded === false) return vscode.TreeItemCollapsibleState.Collapsed;
+    return vscode.TreeItemCollapsibleState.Expanded;
+  }
+
   async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
     if (!element) {
       // Root level - return only changelists and unversioned files section
@@ -278,20 +286,7 @@ export class NativeTreeProvider
 
       // Add changelists
       this.changelists.forEach((changelist) => {
-        let collapsibleState: vscode.TreeItemCollapsibleState;
-
-        if (changelist.files.length === 0) {
-          collapsibleState = vscode.TreeItemCollapsibleState.None;
-        } else if (changelist.isExpanded === true) {
-          collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-        } else if (changelist.isExpanded === false) {
-          collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
-        } else {
-          // Default behavior - expand if has files
-          collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-        }
-
-        items.push(new ChangelistTreeItem(changelist, collapsibleState));
+        items.push(new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist)));
       });
 
       // Add unversioned files section if there are any
@@ -299,8 +294,7 @@ export class NativeTreeProvider
         const collapsibleState = this.unversionedFilesExpanded
           ? vscode.TreeItemCollapsibleState.Expanded
           : vscode.TreeItemCollapsibleState.Collapsed;
-        const unversionedSection = new UnversionedSectionTreeItem(this.unversionedFiles, collapsibleState);
-        items.push(unversionedSection);
+        items.push(new UnversionedSectionTreeItem(this.unversionedFiles, collapsibleState));
       }
 
       return items;
@@ -553,44 +547,15 @@ export class NativeTreeProvider
   }
 
   getChangelistTreeItems(): ChangelistTreeItem[] {
-    return this.changelists.map((changelist) => {
-      let collapsibleState: vscode.TreeItemCollapsibleState;
-
-      if (changelist.files.length === 0) {
-        collapsibleState = vscode.TreeItemCollapsibleState.None;
-      } else if (changelist.isExpanded === true) {
-        collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-      } else if (changelist.isExpanded === false) {
-        collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
-      } else {
-        // Default behavior - expand if has files
-        collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-      }
-
-      const treeItem = new ChangelistTreeItem(changelist, collapsibleState);
-      return treeItem;
-    });
+    return this.changelists.map((changelist) =>
+      new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist))
+    );
   }
 
   getChangelistTreeItemById(changelistId: string): ChangelistTreeItem | undefined {
     const changelist = this.changelists.find((c) => c.id === changelistId);
-    if (!changelist) {
-      return undefined;
-    }
-
-    let collapsibleState: vscode.TreeItemCollapsibleState;
-    if (changelist.files.length === 0) {
-      collapsibleState = vscode.TreeItemCollapsibleState.None;
-    } else if (changelist.isExpanded === true) {
-      collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-    } else if (changelist.isExpanded === false) {
-      collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
-    } else {
-      // Default behavior - expand if has files
-      collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
-    }
-
-    return new ChangelistTreeItem(changelist, collapsibleState);
+    if (!changelist) return undefined;
+    return new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist));
   }
 
   getUnversionedFiles(): FileItem[] {
