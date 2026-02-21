@@ -715,6 +715,15 @@ export function activate(context: vscode.ExtensionContext) {
       await vscode.commands.executeCommand('list.select');
     }),
 
+    vscode.commands.registerCommand('jetbrains-commit-manager.toggleCheckbox', () => {
+      const selected = treeView.selection[0];
+      if (!(selected instanceof FileTreeItem)) return;
+      treeProvider.toggleFileSelection(selected.file.id);
+      treeProvider.updateTree();
+      updateAllCommitUI();
+      updateCommitButtonContext();
+    }),
+
     // Test command to verify extension is working
     vscode.commands.registerCommand('jetbrains-commit-manager.test', () => {
       vscode.window.showInformationMessage('JetBrains Commit Manager extension is working!');

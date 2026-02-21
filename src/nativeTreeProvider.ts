@@ -155,6 +155,10 @@ export class NativeTreeProvider
 
   async refresh(): Promise<void> {
     await this.loadGitStatus();
+    this.updateTree();
+  }
+
+  updateTree(): void {
     this._onDidChangeTreeData.fire();
   }
 

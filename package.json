@@ -181,6 +181,11 @@
         "command": "jetbrains-commit-manager.navigateUp",
         "title": "Navigate Up",
         "category": "JetBrains Commit Manager"
+      },
+      {
+        "command": "jetbrains-commit-manager.toggleCheckbox",
+        "title": "Toggle File Selection",
+        "category": "JetBrains Commit Manager"
       }
     ],
     "viewsContainers": {
@@ -271,6 +276,11 @@
       {
         "command": "jetbrains-commit-manager.navigateUp",
         "key": "up",
+        "when": "focusedView == jetbrains-commit-manager.changelists"
+      },
+      {
+        "command": "jetbrains-commit-manager.toggleCheckbox",
+        "key": "space",
         "when": "focusedView == jetbrains-commit-manager.changelists"
       }
     ]
