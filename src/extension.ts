@@ -338,6 +338,11 @@ export function activate(context: vscode.ExtensionContext) {
         if (!choice) {
           return;
         }
+        const committedIds = new Set(selectedFiles.map((f) => f.id));
+        const snapshot = treeProvider.removeCommittedFiles(committedIds);
+        updateAllCommitUI();
+        updateCommitButtonContext();
+
         const success = await gitService.commitFiles(selectedFiles, message.trim(), { amend: choice.amend });
 
         if (success) {
@@ -348,10 +353,10 @@ export function activate(context: vscode.ExtensionContext) {
               vscode.window.showInformationMessage('Pushed to remote successfully');
             }
           }
-          treeProvider.refresh();
+        } else {
+          treeProvider.restoreFiles(snapshot);
           updateAllCommitUI();
           updateCommitButtonContext();
-        } else {
           vscode.window.showErrorMessage('Failed to commit files. Check the output panel for details.');
         }
       }
@@ -609,6 +614,12 @@ export function activate(context: vscode.ExtensionContext) {
         if (!choice) {
           return;
         }
+        const committedIds = new Set(selectedFiles.map((f) => f.id));
+        const snapshot = treeProvider.removeCommittedFiles(committedIds);
+        updateAllCommitUI();
+        updateCommitButtonContext();
+        commitMessageInput.text = '📝 ';
+
         const success = await gitService.commitFiles(selectedFiles, message.trim(), { amend: choice.amend });
 
         if (success) {
@@ -619,12 +630,10 @@ export function activate(context: vscode.ExtensionContext) {
               vscode.window.showInformationMessage('Pushed to remote successfully');
             }
           }
-          treeProvider.refresh();
+        } else {
+          treeProvider.restoreFiles(snapshot);
           updateAllCommitUI();
           updateCommitButtonContext();
-          // Clear the commit message input
-          commitMessageInput.text = '📝 ';
-        } else {
           vscode.window.showErrorMessage('Failed to commit files. Check the output panel for details.');
         }
       }

@@ -168,6 +168,32 @@ export class NativeTreeProvider
     this._onDidChangeTreeData.fire(item);
   }
 
+  removeCommittedFiles(fileIds: Set<string>): Map<string, FileItem[]> {
+    const snapshot = new Map<string, FileItem[]>();
+    for (const changelist of this.changelists) {
+      const removed = changelist.files.filter((f) => fileIds.has(f.id));
+      if (removed.length > 0) snapshot.set(changelist.id, removed);
+      changelist.files = changelist.files.filter((f) => !fileIds.has(f.id));
+    }
+    const removedUnversioned = this.unversionedFiles.filter((f) => fileIds.has(f.id));
+    if (removedUnversioned.length > 0) snapshot.set('__unversioned__', removedUnversioned);
+    this.unversionedFiles = this.unversionedFiles.filter((f) => !fileIds.has(f.id));
+    this.updateTree();
+    return snapshot;
+  }
+
+  restoreFiles(snapshot: Map<string, FileItem[]>): void {
+    for (const [key, files] of snapshot) {
+      if (key === '__unversioned__') {
+        this.unversionedFiles.push(...files);
+        continue;
+      }
+      const changelist = this.changelists.find((c) => c.id === key);
+      if (changelist) changelist.files.push(...files);
+    }
+    this.updateTree();
+  }
+
   // Removed expand all functionality
 
   collapseAll(): void {
