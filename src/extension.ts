@@ -127,6 +127,9 @@ export function activate(context: vscode.ExtensionContext) {
     const selectedFiles = treeProvider.getSelectedFiles();
     const hasSelectedFiles = selectedFiles.length > 0;
     vscode.commands.executeCommand('setContext', 'jetbrains-commit-manager.hasSelectedFiles', hasSelectedFiles);
+
+    const stagedCount = treeProvider.getChangelists().reduce((sum, c) => sum + c.files.length, 0);
+    treeView.badge = stagedCount > 0 ? { value: stagedCount, tooltip: `${stagedCount} staged files` } : undefined;
   }
 
   // Register commands
