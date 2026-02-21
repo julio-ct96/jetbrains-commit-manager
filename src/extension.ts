@@ -1,10 +1,10 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
-import { NativeTreeProvider, ChangelistTreeItem } from './nativeTreeProvider';
-import { GitService } from './gitService';
-import { FileItem } from './types';
 import { CommitUI } from './commitUI';
+import { GitService } from './gitService';
+import { ChangelistTreeItem, FileTreeItem, NativeTreeProvider } from './nativeTreeProvider';
+import { FileItem, FileStatus } from './types';
 
 let treeProvider: NativeTreeProvider;
 let treeView: vscode.TreeView<vscode.TreeItem>;
@@ -66,6 +66,14 @@ export function activate(context: vscode.ExtensionContext) {
       // Check if any changelist is expanded
       const anyExpanded = treeProvider.getChangelists().some((c) => c.files.length > 0 && c.isExpanded);
       isExpanded = anyExpanded;
+    });
+
+    // Preview file on selection change (click or space)
+    treeView.onDidChangeSelection((e) => {
+      const selected = e.selection[0];
+      if (selected instanceof FileTreeItem) {
+        previewFileTreeItem(selected);
+      }
     });
 
     // Handle checkbox state changes
@@ -144,10 +152,10 @@ export function activate(context: vscode.ExtensionContext) {
         const fileName = uri.fsPath.split('/').pop() || 'file';
         const title = `${fileName} (HEAD ↔︎ Working Tree)`;
 
-        await vscode.commands.executeCommand('vscode.diff', left, right, title);
+        await vscode.commands.executeCommand('vscode.diff', left, right, title, { preserveFocus: true });
       } catch (error) {
         // Fallback to open if diff fails
-        await vscode.commands.executeCommand('vscode.open', uri);
+        await vscode.commands.executeCommand('vscode.open', uri, { preserveFocus: true });
       }
     }),
 
@@ -167,7 +175,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
         if (targetUri) {
-          await vscode.commands.executeCommand('vscode.open', targetUri);
+          await vscode.commands.executeCommand('vscode.open', targetUri, { preserveFocus: true });
         } else {
           vscode.window.showInformationMessage('No file to open.');
         }
@@ -696,6 +704,17 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage(`Auto-stage files ${status}`);
     }),
 
+    // Navigate and preview: move focus then select to trigger preview
+    vscode.commands.registerCommand('jetbrains-commit-manager.navigateDown', async () => {
+      await vscode.commands.executeCommand('list.focusDown');
+      await vscode.commands.executeCommand('list.select');
+    }),
+
+    vscode.commands.registerCommand('jetbrains-commit-manager.navigateUp', async () => {
+      await vscode.commands.executeCommand('list.focusUp');
+      await vscode.commands.executeCommand('list.select');
+    }),
+
     // Test command to verify extension is working
     vscode.commands.registerCommand('jetbrains-commit-manager.test', () => {
       vscode.window.showInformationMessage('JetBrains Commit Manager extension is working!');
@@ -884,4 +903,15 @@ function shouldSkipAutoStage(filePath: string): boolean {
   ];
 
   return skipPatterns.some((pattern) => pattern.test(filePath));
+}
+
+// Preview a file tree item (reuses the same commands as click handlers)
+async function previewFileTreeItem(fileItem: FileTreeItem): Promise<void> {
+  const uri = fileItem.resourceUri;
+  if (!uri) {
+    return;
+  }
+  const isNew = fileItem.file.status === FileStatus.UNTRACKED || fileItem.file.status === FileStatus.ADDED;
+  const command = isNew ? 'jetbrains-commit-manager.openFile' : 'jetbrains-commit-manager.openDiff';
+  await vscode.commands.executeCommand(command, uri);
 }
