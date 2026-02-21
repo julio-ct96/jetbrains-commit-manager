@@ -722,7 +722,10 @@ export function activate(context: vscode.ExtensionContext) {
       const selected = treeView.selection[0];
       if (!(selected instanceof FileTreeItem)) return;
       treeProvider.toggleFileSelection(selected.file.id);
-      treeProvider.updateTree();
+      selected.checkboxState = selected.file.isSelected
+        ? vscode.TreeItemCheckboxState.Checked
+        : vscode.TreeItemCheckboxState.Unchecked;
+      treeProvider.updateTreeItem(selected);
       updateAllCommitUI();
       updateCommitButtonContext();
     }),

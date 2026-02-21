@@ -164,6 +164,10 @@ export class NativeTreeProvider
     this._onDidChangeTreeData.fire();
   }
 
+  updateTreeItem(item: vscode.TreeItem): void {
+    this._onDidChangeTreeData.fire(item);
+  }
+
   // Removed expand all functionality
 
   collapseAll(): void {
