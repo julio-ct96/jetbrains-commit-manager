@@ -1,7 +1,7 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
-import { Changelist, FileItem, FileStatus } from './types';
+import * as vscode from 'vscode';
 import { GitService } from './gitService';
+import { Changelist, FileItem, FileStatus } from './types';
 
 export class ChangelistTreeItem extends vscode.TreeItem {
   constructor(public readonly changelist: Changelist, public readonly collapsibleState: vscode.TreeItemCollapsibleState) {
@@ -58,12 +58,20 @@ export class FileTreeItem extends vscode.TreeItem {
     // Add checkbox behavior - use checkboxState for native checkboxes
     this.checkboxState = file.isSelected ? vscode.TreeItemCheckboxState.Checked : vscode.TreeItemCheckboxState.Unchecked;
 
-    // Add command to open diff on click
-    this.command = {
+    // Untracked/added files have no HEAD version, so open directly; others open diff
+    const isNewFile = file.status === FileStatus.UNTRACKED || file.status === FileStatus.ADDED;
+    const openFileCommand: vscode.Command = {
+      command: 'jetbrains-commit-manager.openFile',
+      title: 'Open File',
+      arguments: [this.resourceUri],
+    };
+    const openDiffCommand: vscode.Command = {
       command: 'jetbrains-commit-manager.openDiff',
       title: 'Open Diff',
       arguments: [this.resourceUri],
     };
+    
+    this.command = isNewFile ? openFileCommand : openDiffCommand;
   }
 }
 
