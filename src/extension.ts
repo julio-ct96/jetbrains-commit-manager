@@ -13,6 +13,7 @@ let commitStatusBarItem: vscode.StatusBarItem;
 let commitMessageInput: vscode.StatusBarItem;
 let isExpanded: boolean = false; // Track expand/collapse state
 let commitUI: CommitUI;
+let skipNextWatcherRefresh = false;
 
 export function activate(context: vscode.ExtensionContext) {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -339,6 +340,7 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         const committedIds = new Set(selectedFiles.map((f) => f.id));
+        skipNextWatcherRefresh = true;
         const snapshot = treeProvider.removeCommittedFiles(committedIds);
         updateAllCommitUI();
         updateCommitButtonContext();
@@ -483,14 +485,19 @@ export function activate(context: vscode.ExtensionContext) {
       );
 
       if (confirm === 'Revert') {
-        const success = await gitService.revertFiles(selectedFiles);
+        const revertedIds = new Set(selectedFiles.map((f) => f.id));
+        skipNextWatcherRefresh = true;
+        const snapshot = treeProvider.removeCommittedFiles(revertedIds);
+        updateAllCommitUI();
+        updateCommitButtonContext();
 
+        const success = await gitService.revertFiles(selectedFiles);
         if (success) {
           vscode.window.showInformationMessage(`Successfully reverted ${selectedFiles.length} file(s)`);
-          treeProvider.refresh();
+        } else {
+          treeProvider.restoreFiles(snapshot);
           updateAllCommitUI();
           updateCommitButtonContext();
-        } else {
           vscode.window.showErrorMessage('Failed to revert files. Check the output panel for details.');
         }
       }
@@ -525,12 +532,19 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
+      skipNextWatcherRefresh = true;
+      const snapshot = treeProvider.removeCommittedFiles(new Set([fileToRevert.id]));
+      updateAllCommitUI();
+      updateCommitButtonContext();
+
       const success = await gitService.revertFiles([fileToRevert]);
       if (success) {
         vscode.window.showInformationMessage(`Reverted ${fileToRevert.name}`);
-        treeProvider.refresh();
+      } else {
+        treeProvider.restoreFiles(snapshot);
         updateAllCommitUI();
         updateCommitButtonContext();
+        vscode.window.showErrorMessage(`Failed to revert ${fileToRevert.name}`);
       }
     }),
 
@@ -556,12 +570,20 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
+      const revertedIds = new Set(files.map((f) => f.id));
+      skipNextWatcherRefresh = true;
+      const snapshot = treeProvider.removeCommittedFiles(revertedIds);
+      updateAllCommitUI();
+      updateCommitButtonContext();
+
       const success = await gitService.revertFiles(files);
       if (success) {
         vscode.window.showInformationMessage(`Reverted ${files.length} file(s) in "${changelistName}"`);
-        treeProvider.refresh();
+      } else {
+        treeProvider.restoreFiles(snapshot);
         updateAllCommitUI();
         updateCommitButtonContext();
+        vscode.window.showErrorMessage(`Failed to revert files in "${changelistName}"`);
       }
     }),
 
@@ -615,6 +637,7 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         const committedIds = new Set(selectedFiles.map((f) => f.id));
+        skipNextWatcherRefresh = true;
         const snapshot = treeProvider.removeCommittedFiles(committedIds);
         updateAllCommitUI();
         updateCommitButtonContext();
@@ -759,6 +782,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Set up file system watcher to refresh on file changes
   const fileSystemWatcher = vscode.workspace.createFileSystemWatcher('**/*');
   fileSystemWatcher.onDidChange(async (uri) => {
+    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
     if (treeProvider) {
       // Auto-stage the changed file if the feature is enabled
       const config = vscode.workspace.getConfiguration('jetbrains-commit-manager');
@@ -790,6 +814,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   fileSystemWatcher.onDidCreate(async (uri) => {
+    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
     if (treeProvider) {
       // Auto-stage the new file if the feature is enabled
       const config = vscode.workspace.getConfiguration('jetbrains-commit-manager');
@@ -821,6 +846,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   fileSystemWatcher.onDidDelete(() => {
+    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
     if (treeProvider) {
       treeProvider.refresh();
       updateAllCommitUI();
