@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import { DefaultValues, DragDropMimeTypes } from './constants';
 import { GitService } from './gitService';
+import { CommitStore } from './store';
 import { ChangelistTreeItem, FileTreeItem, UnversionedSectionTreeItem } from './tree-items';
-import { Changelist, FileItem, FileStatus } from './types';
+import { Changelist, FileItem } from './types';
 
 export class NativeTreeProvider
   implements vscode.TreeDataProvider<vscode.TreeItem>, vscode.TreeDragAndDropController<vscode.TreeItem>
@@ -12,16 +13,6 @@ export class NativeTreeProvider
   readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> =
     this._onDidChangeTreeData.event;
 
-  private _onForceExpand: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
-  readonly onForceExpand: vscode.Event<void> = this._onForceExpand.event;
-
-  private _onChangelistCreated: vscode.EventEmitter<string> = new vscode.EventEmitter<string>();
-  readonly onChangelistCreated: vscode.Event<string> = this._onChangelistCreated.event;
-
-  private _onChangelistAutoExpand: vscode.EventEmitter<string> = new vscode.EventEmitter<string>();
-  readonly onChangelistAutoExpand: vscode.Event<string> = this._onChangelistAutoExpand.event;
-
-  // Drag and drop support
   readonly dropMimeTypes = [
     DragDropMimeTypes.TreeItem,
     DragDropMimeTypes.Changelist,
@@ -31,485 +22,99 @@ export class NativeTreeProvider
     DragDropMimeTypes.Changelist,
   ];
 
-  private changelists: Changelist[] = [];
-  private unversionedFiles: FileItem[] = [];
-  private unversionedFilesExpanded: boolean = true; // Track unversioned files section expansion
-  private gitService: GitService;
+  private store: CommitStore;
   private workspaceRoot: string;
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
-    this.gitService = new GitService(workspaceRoot);
-    this.initializeDefaultChangelist();
-  }
+    const gitService = new GitService(workspaceRoot);
+    this.store = new CommitStore(gitService);
 
-  private initializeDefaultChangelist() {
-    const defaultChangelist: Changelist = {
-      id: DefaultValues.DefaultChangelistId,
-      name: DefaultValues.DefaultChangelistName,
-      description: DefaultValues.DefaultChangelistDescription,
-      files: [],
-      isDefault: true,
-      isExpanded: false, // Start collapsed to match VS Code's default behavior
-      createdAt: new Date(),
-    };
-    this.changelists = [defaultChangelist];
-  }
-
-  async refresh(): Promise<void> {
-    await this.loadGitStatus();
-    this.updateTree();
-  }
-
-  updateTree(): void {
-    this._onDidChangeTreeData.fire();
-  }
-
-  updateTreeItem(item: vscode.TreeItem): void {
-    this._onDidChangeTreeData.fire(item);
-  }
-
-  removeCommittedFiles(fileIds: Set<string>): Map<string, FileItem[]> {
-    const snapshot = new Map<string, FileItem[]>();
-    for (const changelist of this.changelists) {
-      const removed = changelist.files.filter((f) => fileIds.has(f.id));
-      if (removed.length > 0) snapshot.set(changelist.id, removed);
-      changelist.files = changelist.files.filter((f) => !fileIds.has(f.id));
-    }
-    const removedUnversioned = this.unversionedFiles.filter((f) => fileIds.has(f.id));
-    if (removedUnversioned.length > 0) snapshot.set(DefaultValues.UnversionedSnapshotKey, removedUnversioned);
-    this.unversionedFiles = this.unversionedFiles.filter((f) => !fileIds.has(f.id));
-    this.updateTree();
-    return snapshot;
-  }
-
-  restoreFiles(snapshot: Map<string, FileItem[]>): void {
-    for (const [key, files] of snapshot) {
-      if (key === DefaultValues.UnversionedSnapshotKey) {
-        this.unversionedFiles.push(...files);
-        continue;
-      }
-      const changelist = this.changelists.find((c) => c.id === key);
-      if (changelist) changelist.files.push(...files);
-    }
-    this.updateTree();
-  }
-
-  // Removed expand all functionality
-
-  collapseAll(): void {
-    // Force all changelists to be collapsed by updating their collapsible state
-    this.changelists.forEach((changelist) => {
-      changelist.isExpanded = false;
+    this.store.onDidChange(() => {
+      this._onDidChangeTreeData.fire();
     });
-
-    // Also collapse unversioned files section
-    this.unversionedFilesExpanded = false;
-
-    // Fire tree data change to refresh the view with collapsed state
-    this._onDidChangeTreeData.fire();
   }
 
-  private async loadGitStatus(): Promise<void> {
-    try {
-      const gitFiles = await this.gitService.getStatus();
-      const unversionedFiles = await this.gitService.getUnversionedFiles();
+  // --- Event forwarding from store ---
 
-      // Preserve selection states and changelist assignments for all changelists
-      const selectionMap = new Map<string, boolean>();
-      const changelistAssignmentMap = new Map<string, string>();
-
-      // Collect all current selection states and changelist assignments
-      for (const changelist of this.changelists) {
-        for (const file of changelist.files) {
-          selectionMap.set(file.id, file.isSelected);
-          changelistAssignmentMap.set(file.id, changelist.id);
-        }
-      }
-
-      // Also collect selection states from unversioned files
-      for (const file of this.unversionedFiles) {
-        selectionMap.set(file.id, file.isSelected);
-      }
-
-      // Clear all changelists
-      for (const changelist of this.changelists) {
-        changelist.files = [];
-      }
-
-      // Distribute files to their assigned changelists
-      gitFiles.forEach((file) => {
-        // Restore selection state if it was previously selected
-        if (selectionMap.has(file.id)) {
-          file.isSelected = selectionMap.get(file.id)!;
-        }
-
-        // Only add files that are already tracked by Git
-        if (file.status !== FileStatus.Untracked) {
-          const assignedChangelistId = changelistAssignmentMap.get(file.id);
-
-          if (assignedChangelistId) {
-            // File was previously assigned to a specific changelist
-            const targetChangelist = this.changelists.find((c) => c.id === assignedChangelistId);
-            if (targetChangelist) {
-              file.changelistId = targetChangelist.id;
-              targetChangelist.files.push(file);
-            }
-          } else {
-            // New file - add to default changelist
-            const defaultChangelist = this.changelists.find((c) => c.isDefault);
-            if (defaultChangelist) {
-              file.changelistId = defaultChangelist.id;
-              defaultChangelist.files.push(file);
-            }
-          }
-        }
-      });
-
-      // Restore selection states for unversioned files
-      this.unversionedFiles = unversionedFiles.map((file) => {
-        if (selectionMap.has(file.id)) {
-          file.isSelected = selectionMap.get(file.id)!;
-        }
-        return file;
-      });
-    } catch (error) {
-      console.error('Error loading Git status:', error);
-    }
+  get onChangelistCreated(): vscode.Event<string> {
+    return this.store.onChangelistCreated;
   }
+
+  get onChangelistAutoExpand(): vscode.Event<string> {
+    return this.store.onChangelistAutoExpand;
+  }
+
+  // --- TreeDataProvider ---
 
   getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
     return element;
   }
 
   getParent(element: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem> {
-    // Root items (changelists and unversioned section) have no parent
-    if (element instanceof ChangelistTreeItem || element instanceof UnversionedSectionTreeItem) {
-      return null;
-    }
+    if (element instanceof ChangelistTreeItem || element instanceof UnversionedSectionTreeItem) return null;
 
-    // File items belong to their changelist
     if (element instanceof FileTreeItem && element.changelistId) {
-      const changelist = this.changelists.find((c) => c.id === element.changelistId);
-      if (changelist) {
-        return new ChangelistTreeItem(changelist, vscode.TreeItemCollapsibleState.Expanded);
-      }
+      const changelist = this.store.getChangelists().find((c) => c.id === element.changelistId);
+      if (changelist) return new ChangelistTreeItem(changelist, vscode.TreeItemCollapsibleState.Expanded);
     }
 
-    // Unversioned files belong to the unversioned section
     if (element instanceof FileTreeItem && !element.changelistId) {
-      return new UnversionedSectionTreeItem(this.unversionedFiles, vscode.TreeItemCollapsibleState.Expanded);
+      return new UnversionedSectionTreeItem(this.store.getUnversionedFiles(), vscode.TreeItemCollapsibleState.Expanded);
     }
 
     return null;
   }
 
-  private getCollapsibleState(changelist: Changelist): vscode.TreeItemCollapsibleState {
-    if (changelist.files.length === 0) return vscode.TreeItemCollapsibleState.None;
-    if (changelist.isExpanded === false) return vscode.TreeItemCollapsibleState.Collapsed;
-    return vscode.TreeItemCollapsibleState.Expanded;
-  }
-
   async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
     if (!element) {
-      // Root level - return only changelists and unversioned files section
       const items: vscode.TreeItem[] = [];
 
-      // Add changelists
-      this.changelists.forEach((changelist) => {
+      this.store.getChangelists().forEach((changelist) => {
         items.push(new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist)));
       });
 
-      // Add unversioned files section if there are any
-      if (this.unversionedFiles.length > 0) {
-        const collapsibleState = this.unversionedFilesExpanded
+      const unversionedFiles = this.store.getUnversionedFiles();
+      if (unversionedFiles.length > 0) {
+        const collapsibleState = this.store.isUnversionedExpanded()
           ? vscode.TreeItemCollapsibleState.Expanded
           : vscode.TreeItemCollapsibleState.Collapsed;
-        items.push(new UnversionedSectionTreeItem(this.unversionedFiles, collapsibleState));
+        items.push(new UnversionedSectionTreeItem(unversionedFiles, collapsibleState));
       }
 
       return items;
     }
 
     if (element instanceof ChangelistTreeItem) {
-      // Return files in this changelist
       return element.changelist.files.map((file) => new FileTreeItem(file, this.workspaceRoot, element.changelist.id));
     }
 
     if (element instanceof UnversionedSectionTreeItem) {
-      // Return unversioned files
-      return this.unversionedFiles.map((file) => new FileTreeItem(file, this.workspaceRoot));
+      return this.store.getUnversionedFiles().map((file) => new FileTreeItem(file, this.workspaceRoot));
     }
 
     return [];
   }
 
-  // Handle checkbox state changes
+  // --- Checkbox handling ---
+
   async onDidChangeCheckboxState(event: vscode.TreeCheckboxChangeEvent<vscode.TreeItem>): Promise<void> {
     for (const [item, checkboxState] of event.items) {
       if (item instanceof FileTreeItem) {
         const isChecked = checkboxState === vscode.TreeItemCheckboxState.Checked;
-        this.toggleFileSelection(item.file.id, isChecked);
+        this.store.toggleFileSelection(item.file.id, isChecked);
       } else if (item instanceof ChangelistTreeItem) {
         const isChecked = checkboxState === vscode.TreeItemCheckboxState.Checked;
-        this.toggleChangelistSelection(item.changelist.id, isChecked);
+        this.store.toggleChangelistSelection(item.changelist.id, isChecked);
       } else if (item instanceof UnversionedSectionTreeItem) {
         const isChecked = checkboxState === vscode.TreeItemCheckboxState.Checked;
-        this.toggleUnversionedSelection(isChecked);
+        this.store.toggleUnversionedSelection(isChecked);
       }
     }
-    this._onDidChangeTreeData.fire();
   }
 
-  async createChangelist(name: string): Promise<void> {
-    const newChangelist: Changelist = {
-      id: this.generateId(),
-      name,
-      files: [],
-      isExpanded: true, // Start expanded by default for new changelists
-      createdAt: new Date(),
-    };
+  // --- Drag and drop ---
 
-    this.changelists.push(newChangelist);
-    this._onDidChangeTreeData.fire();
-
-    // Emit event that a new changelist was created
-    this._onChangelistCreated.fire(newChangelist.id);
-  }
-
-  async deleteChangelist(changelistId: string): Promise<void> {
-    const changelist = this.changelists.find((c) => c.id === changelistId);
-    if (!changelist || changelist.isDefault) {
-      return;
-    }
-
-    // Move files to default changelist
-    const defaultChangelist = this.changelists.find((c) => c.isDefault);
-    if (defaultChangelist && changelist.files.length > 0) {
-      defaultChangelist.files.push(...changelist.files);
-    }
-
-    this.changelists = this.changelists.filter((c) => c.id !== changelistId);
-    this._onDidChangeTreeData.fire();
-  }
-
-  async renameChangelist(changelistId: string, newName: string): Promise<void> {
-    const changelist = this.changelists.find((c) => c.id === changelistId);
-    if (!changelist) {
-      return;
-    }
-
-    // Check if the new name already exists
-    const existingChangelist = this.changelists.find((c) => c.name === newName && c.id !== changelistId);
-    if (existingChangelist) {
-      throw new Error(`A changelist with the name "${newName}" already exists`);
-    }
-
-    changelist.name = newName;
-    this._onDidChangeTreeData.fire();
-  }
-
-  async moveChangelistFiles(sourceChangelistId: string, targetChangelistId: string): Promise<void> {
-    const sourceChangelist = this.changelists.find((c) => c.id === sourceChangelistId);
-    const targetChangelist = this.changelists.find((c) => c.id === targetChangelistId);
-
-    if (!sourceChangelist || !targetChangelist) {
-      return;
-    }
-
-    // Move all files from source to target
-    const filesToMove = [...sourceChangelist.files];
-    sourceChangelist.files = [];
-
-    // Update changelistId for all moved files
-    filesToMove.forEach((file) => {
-      file.changelistId = targetChangelistId;
-    });
-
-    // Add files to target changelist
-    targetChangelist.files.push(...filesToMove);
-
-    // Auto-expand the target changelist to show the moved files
-    targetChangelist.isExpanded = true;
-
-    this._onDidChangeTreeData.fire();
-  }
-
-  async moveFileToChangelist(fileId: string, targetChangelistId: string): Promise<void> {
-    let sourceChangelist: Changelist | undefined;
-    let file: FileItem | undefined;
-    let wasUntracked = false;
-
-    // Find the file in changelists
-    for (const changelist of this.changelists) {
-      const fileIndex = changelist.files.findIndex((f) => f.id === fileId);
-      if (fileIndex !== -1) {
-        sourceChangelist = changelist;
-        file = changelist.files[fileIndex];
-        changelist.files.splice(fileIndex, 1);
-        break;
-      }
-    }
-
-    // Find the file in unversioned files
-    if (!file) {
-      const fileIndex = this.unversionedFiles.findIndex((f) => f.id === fileId);
-      if (fileIndex !== -1) {
-        file = this.unversionedFiles[fileIndex];
-        this.unversionedFiles.splice(fileIndex, 1);
-        wasUntracked = true;
-      }
-    }
-
-    if (file) {
-      const targetChangelist = this.changelists.find((c) => c.id === targetChangelistId);
-      if (targetChangelist) {
-        // If the file was untracked, add it to Git tracking
-        if (wasUntracked) {
-          try {
-            await this.gitService.addFileToGit(file.path);
-            // Update the file status to ADDED since it's now tracked
-            file.status = FileStatus.Added;
-          } catch (error) {
-            console.error('Error adding file to Git:', error);
-            // If adding to Git fails, put the file back in unversioned files
-            this.unversionedFiles.push(file);
-            this._onDidChangeTreeData.fire();
-            return;
-          }
-        }
-
-        file.changelistId = targetChangelistId;
-        targetChangelist.files.push(file);
-
-        // Auto-expand the target changelist to show the moved file
-        targetChangelist.isExpanded = true;
-
-        // Emit event to force visual expansion
-        this._onChangelistAutoExpand.fire(targetChangelistId);
-      }
-    }
-
-    this._onDidChangeTreeData.fire();
-  }
-
-  getSelectedFiles(): FileItem[] {
-    const selectedFiles: FileItem[] = [];
-
-    for (const changelist of this.changelists) {
-      selectedFiles.push(...changelist.files.filter((f) => f.isSelected));
-    }
-
-    selectedFiles.push(...this.unversionedFiles.filter((f) => f.isSelected));
-
-    return selectedFiles;
-  }
-
-  toggleFileSelection(fileId: string, isSelected?: boolean): void {
-    // Check in changelists
-    for (const changelist of this.changelists) {
-      const file = changelist.files.find((f) => f.id === fileId);
-      if (file) {
-        file.isSelected = isSelected !== undefined ? isSelected : !file.isSelected;
-        return;
-      }
-    }
-
-    // Check in unversioned files
-    const file = this.unversionedFiles.find((f) => f.id === fileId);
-    if (file) {
-      file.isSelected = isSelected !== undefined ? isSelected : !file.isSelected;
-    }
-  }
-
-  toggleChangelistSelection(changelistId: string, isSelected: boolean): void {
-    const changelist = this.changelists.find((c) => c.id === changelistId);
-    if (changelist) {
-      // Select/deselect all files in the changelist
-      changelist.files.forEach((file) => {
-        file.isSelected = isSelected;
-      });
-
-      // Trigger tree refresh to update checkbox states
-      this._onDidChangeTreeData.fire();
-    }
-  }
-
-  toggleUnversionedSelection(isSelected: boolean): void {
-    // Select/deselect all unversioned files
-    this.unversionedFiles.forEach((file) => {
-      file.isSelected = isSelected;
-    });
-
-    // Trigger tree refresh to update checkbox states
-    this._onDidChangeTreeData.fire();
-  }
-
-  selectAllFiles(): void {
-    this.changelists.forEach((changelist) => {
-      changelist.files.forEach((file) => {
-        file.isSelected = true;
-      });
-    });
-
-    this.unversionedFiles.forEach((file) => {
-      file.isSelected = true;
-    });
-
-    this._onDidChangeTreeData.fire();
-  }
-
-  deselectAllFiles(): void {
-    this.changelists.forEach((changelist) => {
-      changelist.files.forEach((file) => {
-        file.isSelected = false;
-      });
-    });
-
-    this.unversionedFiles.forEach((file) => {
-      file.isSelected = false;
-    });
-
-    this._onDidChangeTreeData.fire();
-  }
-
-  getChangelists(): Changelist[] {
-    return this.changelists;
-  }
-
-  getChangelistTreeItems(): ChangelistTreeItem[] {
-    return this.changelists.map(
-      (changelist) => new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist)),
-    );
-  }
-
-  getChangelistTreeItemById(changelistId: string): ChangelistTreeItem | undefined {
-    const changelist = this.changelists.find((c) => c.id === changelistId);
-    if (!changelist) return undefined;
-    return new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist));
-  }
-
-  getUnversionedFiles(): FileItem[] {
-    return this.unversionedFiles;
-  }
-
-  getAllFiles(): FileItem[] {
-    const allFiles: FileItem[] = [];
-
-    for (const changelist of this.changelists) {
-      allFiles.push(...changelist.files);
-    }
-
-    allFiles.push(...this.unversionedFiles);
-
-    return allFiles;
-  }
-
-  private generateId(): string {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-  }
-
-  // Drag and drop implementation
   async handleDrag(
     source: readonly vscode.TreeItem[],
     dataTransfer: vscode.DataTransfer,
@@ -543,32 +148,25 @@ export class NativeTreeProvider
     dataTransfer: vscode.DataTransfer,
     token: vscode.CancellationToken,
   ): Promise<void> {
-    if (!target) {
-      return;
-    }
+    if (!target) return;
 
     let targetChangelistId: string;
 
     if (target instanceof ChangelistTreeItem) {
-      // Dropping on a changelist - move files to that changelist
       targetChangelistId = target.changelist.id;
     } else if (target instanceof FileTreeItem) {
-      // Dropping on a file - move files to the changelist containing the target file
       targetChangelistId = target.changelistId || DefaultValues.DefaultChangelistId;
     } else {
-      // Unknown target type
       return;
     }
 
-    // Handle file drops
     const fileTransferItem = dataTransfer.get(DragDropMimeTypes.TreeItem);
     if (fileTransferItem) {
       try {
         const fileIds = fileTransferItem.value as string[];
         if (Array.isArray(fileIds)) {
-          // Move each file to the target changelist
           for (const fileId of fileIds) {
-            await this.moveFileToChangelist(fileId, targetChangelistId);
+            await this.store.moveFileToChangelist(fileId, targetChangelistId);
           }
         }
       } catch (error) {
@@ -576,17 +174,14 @@ export class NativeTreeProvider
       }
     }
 
-    // Handle changelist drops
     const changelistTransferItem = dataTransfer.get(DragDropMimeTypes.Changelist);
     if (changelistTransferItem) {
       try {
         const changelistIds = changelistTransferItem.value as string[];
         if (Array.isArray(changelistIds)) {
-          // Move all files from source changelists to target changelist
           for (const sourceChangelistId of changelistIds) {
             if (sourceChangelistId !== targetChangelistId) {
-              // Don't move to self
-              await this.moveChangelistFiles(sourceChangelistId, targetChangelistId);
+              await this.store.moveChangelistFiles(sourceChangelistId, targetChangelistId);
             }
           }
         }
@@ -594,14 +189,107 @@ export class NativeTreeProvider
         console.error('Error handling changelist drop:', error);
       }
     }
+  }
 
-    // Auto-expand the target changelist to show the dropped files
-    const targetChangelist = this.changelists.find((c) => c.id === targetChangelistId);
-    if (targetChangelist && targetChangelist.files.length > 0) {
-      targetChangelist.isExpanded = true;
+  // --- Presentation helpers ---
 
-      // Emit event to force visual expansion
-      this._onChangelistAutoExpand.fire(targetChangelist.id);
-    }
+  private getCollapsibleState(changelist: Changelist): vscode.TreeItemCollapsibleState {
+    if (changelist.files.length === 0) return vscode.TreeItemCollapsibleState.None;
+    if (changelist.isExpanded === false) return vscode.TreeItemCollapsibleState.Collapsed;
+    return vscode.TreeItemCollapsibleState.Expanded;
+  }
+
+  getChangelistTreeItems(): ChangelistTreeItem[] {
+    return this.store.getChangelists().map(
+      (changelist) => new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist)),
+    );
+  }
+
+  getChangelistTreeItemById(changelistId: string): ChangelistTreeItem | undefined {
+    const changelist = this.store.getChangelists().find((c) => c.id === changelistId);
+    if (!changelist) return undefined;
+    return new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist));
+  }
+
+  updateTree(): void {
+    this._onDidChangeTreeData.fire();
+  }
+
+  updateTreeItem(item: vscode.TreeItem): void {
+    this._onDidChangeTreeData.fire(item);
+  }
+
+  // --- Facade methods (maintain API for extension.ts) ---
+
+  async refresh(): Promise<void> {
+    await this.store.refresh();
+  }
+
+  async createChangelist(name: string): Promise<void> {
+    await this.store.createChangelist(name);
+  }
+
+  async deleteChangelist(changelistId: string): Promise<void> {
+    await this.store.deleteChangelist(changelistId);
+  }
+
+  async renameChangelist(changelistId: string, newName: string): Promise<void> {
+    await this.store.renameChangelist(changelistId, newName);
+  }
+
+  async moveFileToChangelist(fileId: string, targetChangelistId: string): Promise<void> {
+    await this.store.moveFileToChangelist(fileId, targetChangelistId);
+  }
+
+  async moveChangelistFiles(sourceChangelistId: string, targetChangelistId: string): Promise<void> {
+    await this.store.moveChangelistFiles(sourceChangelistId, targetChangelistId);
+  }
+
+  toggleFileSelection(fileId: string, isSelected?: boolean): void {
+    this.store.toggleFileSelection(fileId, isSelected);
+  }
+
+  toggleChangelistSelection(changelistId: string, isSelected: boolean): void {
+    this.store.toggleChangelistSelection(changelistId, isSelected);
+  }
+
+  toggleUnversionedSelection(isSelected: boolean): void {
+    this.store.toggleUnversionedSelection(isSelected);
+  }
+
+  selectAllFiles(): void {
+    this.store.selectAllFiles();
+  }
+
+  deselectAllFiles(): void {
+    this.store.deselectAllFiles();
+  }
+
+  collapseAll(): void {
+    this.store.collapseAll();
+  }
+
+  removeCommittedFiles(fileIds: Set<string>): Map<string, FileItem[]> {
+    return this.store.removeCommittedFiles(fileIds);
+  }
+
+  restoreFiles(snapshot: Map<string, FileItem[]>): void {
+    this.store.restoreFiles(snapshot);
+  }
+
+  getChangelists(): Changelist[] {
+    return this.store.getChangelists();
+  }
+
+  getSelectedFiles(): FileItem[] {
+    return this.store.getSelectedFiles();
+  }
+
+  getAllFiles(): FileItem[] {
+    return this.store.getAllFiles();
+  }
+
+  getUnversionedFiles(): FileItem[] {
+    return this.store.getUnversionedFiles();
   }
 }
