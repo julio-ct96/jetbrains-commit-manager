@@ -197,82 +197,16 @@ export class NativeTreeProvider
     return vscode.TreeItemCollapsibleState.Expanded;
   }
 
-  getChangelistTreeItems(): ChangelistTreeItem[] {
-    return this.store.getChangelists().map(
-      (changelist) => new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist)),
-    );
-  }
-
   getChangelistTreeItemById(changelistId: string): ChangelistTreeItem | undefined {
     const changelist = this.store.getChangelists().find((c) => c.id === changelistId);
     if (!changelist) return undefined;
     return new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist));
   }
 
-  updateTree(): void {
-    this._onDidChangeTreeData.fire();
-  }
-
-  updateTreeItem(item: vscode.TreeItem): void {
-    this._onDidChangeTreeData.fire(item);
-  }
-
-  // --- Facade methods (maintain API for extension.ts) ---
+  // --- Facade methods (read-only accessors for extension.ts) ---
 
   async refresh(): Promise<void> {
     await this.store.refresh();
-  }
-
-  async createChangelist(name: string): Promise<void> {
-    await this.store.createChangelist(name);
-  }
-
-  async deleteChangelist(changelistId: string): Promise<void> {
-    await this.store.deleteChangelist(changelistId);
-  }
-
-  async renameChangelist(changelistId: string, newName: string): Promise<void> {
-    await this.store.renameChangelist(changelistId, newName);
-  }
-
-  async moveFileToChangelist(fileId: string, targetChangelistId: string): Promise<void> {
-    await this.store.moveFileToChangelist(fileId, targetChangelistId);
-  }
-
-  async moveChangelistFiles(sourceChangelistId: string, targetChangelistId: string): Promise<void> {
-    await this.store.moveChangelistFiles(sourceChangelistId, targetChangelistId);
-  }
-
-  toggleFileSelection(fileId: string, isSelected?: boolean): void {
-    this.store.toggleFileSelection(fileId, isSelected);
-  }
-
-  toggleChangelistSelection(changelistId: string, isSelected: boolean): void {
-    this.store.toggleChangelistSelection(changelistId, isSelected);
-  }
-
-  toggleUnversionedSelection(isSelected: boolean): void {
-    this.store.toggleUnversionedSelection(isSelected);
-  }
-
-  selectAllFiles(): void {
-    this.store.selectAllFiles();
-  }
-
-  deselectAllFiles(): void {
-    this.store.deselectAllFiles();
-  }
-
-  collapseAll(): void {
-    this.store.collapseAll();
-  }
-
-  removeCommittedFiles(fileIds: Set<string>): Map<string, FileItem[]> {
-    return this.store.removeCommittedFiles(fileIds);
-  }
-
-  restoreFiles(snapshot: Map<string, FileItem[]>): void {
-    this.store.restoreFiles(snapshot);
   }
 
   getChangelists(): Changelist[] {
