@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import { CommandIds, ConfigKeys, ContextKeys, ContextValues, DefaultValues, StatusBarText, ViewIds } from './constants';
 import { GitService } from './services';
+import { CommitStore } from './store';
 import { NativeTreeProvider } from './nativeTreeProvider';
 import { ChangelistTreeItem, FileTreeItem } from './tree-items';
 import { FileItem, FileStatus } from './types';
@@ -22,8 +23,9 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   if (workspaceRoot) {
-    treeProvider = new NativeTreeProvider(workspaceRoot);
     gitService = new GitService(workspaceRoot);
+    const commitStore = new CommitStore(gitService);
+    treeProvider = new NativeTreeProvider(commitStore, workspaceRoot);
 
     // Create the tree view
     treeView = vscode.window.createTreeView(ViewIds.Changelists, {

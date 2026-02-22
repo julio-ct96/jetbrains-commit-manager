@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { DefaultValues, DragDropMimeTypes } from './constants';
-import { GitService } from './services';
 import { CommitStore } from './store';
 import { ChangelistTreeItem, FileTreeItem, UnversionedSectionTreeItem } from './tree-items';
 import { Changelist, FileItem } from './types';
@@ -25,10 +24,9 @@ export class NativeTreeProvider
   private store: CommitStore;
   private workspaceRoot: string;
 
-  constructor(workspaceRoot: string) {
+  constructor(store: CommitStore, workspaceRoot: string) {
+    this.store = store;
     this.workspaceRoot = workspaceRoot;
-    const gitService = new GitService(workspaceRoot);
-    this.store = new CommitStore(gitService);
 
     this.store.onDidChange(() => {
       this._onDidChangeTreeData.fire();
