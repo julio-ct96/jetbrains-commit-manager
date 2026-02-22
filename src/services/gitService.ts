@@ -212,12 +212,6 @@ export class GitService {
       // Clear any existing lock files before starting
       await this.clearLockFiles();
 
-      // Check current git status before any operations
-      const { stdout: statusBefore } = await this.executeGitCommand(['status', '--porcelain']);
-
-      // Check current staged files
-      const { stdout: stagedBefore } = await this.executeGitCommand(['diff', '--cached', '--name-only']);
-
       // The direct stash approach with file paths doesn't work as expected
       // It stashes all staged files PLUS the specified files, not just the specified files
       // So we need to use the staging approach which properly isolates only selected files
@@ -237,16 +231,6 @@ export class GitService {
         .trim()
         .split('\n')
         .filter((f) => f.length > 0);
-
-      // Get all modified files to track what we need to restore
-      const { stdout: allModifiedFiles } = await this.executeGitCommand(['diff', '--name-only']);
-      const modifiedFiles = allModifiedFiles
-        .trim()
-        .split('\n')
-        .filter((f) => f.length > 0);
-
-      // Create a temporary commit with only the selected files
-      const selectedFilePaths = files.map((f) => f.path);
 
       // First, unstage all files
       if (currentStagedFiles.length > 0) {
@@ -289,19 +273,12 @@ export class GitService {
         }
       }
 
-      // Check what's staged after our operations
-      const { stdout: stagedAfter } = await this.executeGitCommand(['diff', '--cached', '--name-only']);
-
       // Create a stash with only the staged files (our selected files)
       const stashArgs = ['stash', 'push', '--staged'];
       if (message) {
         stashArgs.push('-m', message);
       }
       await this.executeGitCommand(stashArgs);
-
-      // Check what was actually stashed
-      const { stdout: stashList } = await this.executeGitCommand(['stash', 'list', '-1']);
-      const { stdout: stashShow } = await this.executeGitCommand(['stash', 'show', '--name-only', 'stash@{0}']);
 
       // Now restore the original state: re-stage all the files that were staged before
       if (currentStagedFiles.length > 0) {

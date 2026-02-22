@@ -93,28 +93,33 @@ export class CommitStore {
       }
     }
 
-    if (file) {
-      const targetChangelist = this.changelists.find((c) => c.id === targetChangelistId);
-      if (targetChangelist) {
-        if (wasUntracked) {
-          try {
-            await this.gitService.addFileToGit(file.path);
-            file.status = FileStatus.Added;
-          } catch (error) {
-            console.error('Error adding file to Git:', error);
-            this.unversionedFiles.push(file);
-            this._onDidChange.fire();
-            return;
-          }
-        }
+    if (!file) {
+      this._onDidChange.fire();
+      return;
+    }
 
-        file.changelistId = targetChangelistId;
-        targetChangelist.files.push(file);
-        targetChangelist.isExpanded = true;
-        this._onChangelistAutoExpand.fire(targetChangelistId);
+    const targetChangelist = this.changelists.find((c) => c.id === targetChangelistId);
+    if (!targetChangelist) {
+      this._onDidChange.fire();
+      return;
+    }
+
+    if (wasUntracked) {
+      try {
+        await this.gitService.addFileToGit(file.path);
+        file.status = FileStatus.Added;
+      } catch (error) {
+        console.error('Error adding file to Git:', error);
+        this.unversionedFiles.push(file);
+        this._onDidChange.fire();
+        return;
       }
     }
 
+    file.changelistId = targetChangelistId;
+    targetChangelist.files.push(file);
+    targetChangelist.isExpanded = true;
+    this._onChangelistAutoExpand.fire(targetChangelistId);
     this._onDidChange.fire();
   }
 
