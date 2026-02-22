@@ -3,8 +3,8 @@
 import * as vscode from 'vscode';
 import { CommitUI } from './commitUI';
 import { GitService } from './gitService';
-import { ChangelistTreeItem, NativeTreeProvider } from './nativeTreeProvider';
-import { FileItem } from './types';
+import { ChangelistTreeItem, FileTreeItem, NativeTreeProvider } from './nativeTreeProvider';
+import { FileItem, FileStatus } from './types';
 
 let treeProvider: NativeTreeProvider;
 let treeView: vscode.TreeView<vscode.TreeItem>;
@@ -13,6 +13,7 @@ let commitStatusBarItem: vscode.StatusBarItem;
 let commitMessageInput: vscode.StatusBarItem;
 let isExpanded: boolean = false; // Track expand/collapse state
 let commitUI: CommitUI;
+let skipNextWatcherRefresh = false;
 
 export function activate(context: vscode.ExtensionContext) {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -68,6 +69,14 @@ export function activate(context: vscode.ExtensionContext) {
       isExpanded = anyExpanded;
     });
 
+    // Preview file on selection change (click or space)
+    treeView.onDidChangeSelection((e) => {
+      const selected = e.selection[0];
+      if (selected instanceof FileTreeItem) {
+        previewFileTreeItem(selected);
+      }
+    });
+
     // Handle checkbox state changes
     treeView.onDidChangeCheckboxState((e) => {
       treeProvider.onDidChangeCheckboxState(e);
@@ -119,6 +128,9 @@ export function activate(context: vscode.ExtensionContext) {
     const selectedFiles = treeProvider.getSelectedFiles();
     const hasSelectedFiles = selectedFiles.length > 0;
     vscode.commands.executeCommand('setContext', 'jetbrains-commit-manager.hasSelectedFiles', hasSelectedFiles);
+
+    const stagedCount = treeProvider.getChangelists().reduce((sum, c) => sum + c.files.length, 0);
+    treeView.badge = stagedCount > 0 ? { value: stagedCount, tooltip: `${stagedCount} staged files` } : undefined;
   }
 
   // Register commands
@@ -144,10 +156,10 @@ export function activate(context: vscode.ExtensionContext) {
         const fileName = uri.fsPath.split('/').pop() || 'file';
         const title = `${fileName} (HEAD ↔︎ Working Tree)`;
 
-        await vscode.commands.executeCommand('vscode.diff', left, right, title);
+        await vscode.commands.executeCommand('vscode.diff', left, right, title, { preserveFocus: true });
       } catch (error) {
         // Fallback to open if diff fails
-        await vscode.commands.executeCommand('vscode.open', uri);
+        await vscode.commands.executeCommand('vscode.open', uri, { preserveFocus: true });
       }
     }),
 
@@ -167,7 +179,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
         if (targetUri) {
-          await vscode.commands.executeCommand('vscode.open', targetUri);
+          await vscode.commands.executeCommand('vscode.open', targetUri, { preserveFocus: true });
         } else {
           vscode.window.showInformationMessage('No file to open.');
         }
@@ -327,6 +339,12 @@ export function activate(context: vscode.ExtensionContext) {
         if (!choice) {
           return;
         }
+        const committedIds = new Set(selectedFiles.map((f) => f.id));
+        skipNextWatcherRefresh = true;
+        const snapshot = treeProvider.removeCommittedFiles(committedIds);
+        updateAllCommitUI();
+        updateCommitButtonContext();
+
         const success = await gitService.commitFiles(selectedFiles, message.trim(), { amend: choice.amend });
 
         if (success) {
@@ -337,10 +355,10 @@ export function activate(context: vscode.ExtensionContext) {
               vscode.window.showInformationMessage('Pushed to remote successfully');
             }
           }
-          treeProvider.refresh();
+        } else {
+          treeProvider.restoreFiles(snapshot);
           updateAllCommitUI();
           updateCommitButtonContext();
-        } else {
           vscode.window.showErrorMessage('Failed to commit files. Check the output panel for details.');
         }
       }
@@ -467,14 +485,19 @@ export function activate(context: vscode.ExtensionContext) {
       );
 
       if (confirm === 'Revert') {
-        const success = await gitService.revertFiles(selectedFiles);
+        const revertedIds = new Set(selectedFiles.map((f) => f.id));
+        skipNextWatcherRefresh = true;
+        const snapshot = treeProvider.removeCommittedFiles(revertedIds);
+        updateAllCommitUI();
+        updateCommitButtonContext();
 
+        const success = await gitService.revertFiles(selectedFiles);
         if (success) {
           vscode.window.showInformationMessage(`Successfully reverted ${selectedFiles.length} file(s)`);
-          treeProvider.refresh();
+        } else {
+          treeProvider.restoreFiles(snapshot);
           updateAllCommitUI();
           updateCommitButtonContext();
-        } else {
           vscode.window.showErrorMessage('Failed to revert files. Check the output panel for details.');
         }
       }
@@ -509,12 +532,19 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
+      skipNextWatcherRefresh = true;
+      const snapshot = treeProvider.removeCommittedFiles(new Set([fileToRevert.id]));
+      updateAllCommitUI();
+      updateCommitButtonContext();
+
       const success = await gitService.revertFiles([fileToRevert]);
       if (success) {
         vscode.window.showInformationMessage(`Reverted ${fileToRevert.name}`);
-        treeProvider.refresh();
+      } else {
+        treeProvider.restoreFiles(snapshot);
         updateAllCommitUI();
         updateCommitButtonContext();
+        vscode.window.showErrorMessage(`Failed to revert ${fileToRevert.name}`);
       }
     }),
 
@@ -540,12 +570,20 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
+      const revertedIds = new Set(files.map((f) => f.id));
+      skipNextWatcherRefresh = true;
+      const snapshot = treeProvider.removeCommittedFiles(revertedIds);
+      updateAllCommitUI();
+      updateCommitButtonContext();
+
       const success = await gitService.revertFiles(files);
       if (success) {
         vscode.window.showInformationMessage(`Reverted ${files.length} file(s) in "${changelistName}"`);
-        treeProvider.refresh();
+      } else {
+        treeProvider.restoreFiles(snapshot);
         updateAllCommitUI();
         updateCommitButtonContext();
+        vscode.window.showErrorMessage(`Failed to revert files in "${changelistName}"`);
       }
     }),
 
@@ -598,6 +636,13 @@ export function activate(context: vscode.ExtensionContext) {
         if (!choice) {
           return;
         }
+        const committedIds = new Set(selectedFiles.map((f) => f.id));
+        skipNextWatcherRefresh = true;
+        const snapshot = treeProvider.removeCommittedFiles(committedIds);
+        updateAllCommitUI();
+        updateCommitButtonContext();
+        commitMessageInput.text = '📝 ';
+
         const success = await gitService.commitFiles(selectedFiles, message.trim(), { amend: choice.amend });
 
         if (success) {
@@ -608,12 +653,10 @@ export function activate(context: vscode.ExtensionContext) {
               vscode.window.showInformationMessage('Pushed to remote successfully');
             }
           }
-          treeProvider.refresh();
+        } else {
+          treeProvider.restoreFiles(snapshot);
           updateAllCommitUI();
           updateCommitButtonContext();
-          // Clear the commit message input
-          commitMessageInput.text = '📝 ';
-        } else {
           vscode.window.showErrorMessage('Failed to commit files. Check the output panel for details.');
         }
       }
@@ -696,6 +739,29 @@ export function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage(`Auto-stage files ${status}`);
     }),
 
+    // Navigate and preview: move focus then select to trigger preview
+    vscode.commands.registerCommand('jetbrains-commit-manager.navigateDown', async () => {
+      await vscode.commands.executeCommand('list.focusDown');
+      await vscode.commands.executeCommand('list.select');
+    }),
+
+    vscode.commands.registerCommand('jetbrains-commit-manager.navigateUp', async () => {
+      await vscode.commands.executeCommand('list.focusUp');
+      await vscode.commands.executeCommand('list.select');
+    }),
+
+    vscode.commands.registerCommand('jetbrains-commit-manager.toggleCheckbox', () => {
+      const selected = treeView.selection[0];
+      if (!(selected instanceof FileTreeItem)) return;
+      treeProvider.toggleFileSelection(selected.file.id);
+      selected.checkboxState = selected.file.isSelected
+        ? vscode.TreeItemCheckboxState.Checked
+        : vscode.TreeItemCheckboxState.Unchecked;
+      treeProvider.updateTreeItem(selected);
+      updateAllCommitUI();
+      updateCommitButtonContext();
+    }),
+
     // Test command to verify extension is working
     vscode.commands.registerCommand('jetbrains-commit-manager.test', () => {
       vscode.window.showInformationMessage('JetBrains Commit Manager extension is working!');
@@ -716,6 +782,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Set up file system watcher to refresh on file changes
   const fileSystemWatcher = vscode.workspace.createFileSystemWatcher('**/*');
   fileSystemWatcher.onDidChange(async (uri) => {
+    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
     if (treeProvider) {
       // Auto-stage the changed file if the feature is enabled
       const config = vscode.workspace.getConfiguration('jetbrains-commit-manager');
@@ -747,6 +814,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   fileSystemWatcher.onDidCreate(async (uri) => {
+    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
     if (treeProvider) {
       // Auto-stage the new file if the feature is enabled
       const config = vscode.workspace.getConfiguration('jetbrains-commit-manager');
@@ -778,6 +846,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   fileSystemWatcher.onDidDelete(() => {
+    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
     if (treeProvider) {
       treeProvider.refresh();
       updateAllCommitUI();
@@ -884,4 +953,15 @@ function shouldSkipAutoStage(filePath: string): boolean {
   ];
 
   return skipPatterns.some((pattern) => pattern.test(filePath));
+}
+
+// Preview a file tree item (reuses the same commands as click handlers)
+async function previewFileTreeItem(fileItem: FileTreeItem): Promise<void> {
+  const uri = fileItem.resourceUri;
+  if (!uri) {
+    return;
+  }
+  const isNew = fileItem.file.status === FileStatus.UNTRACKED || fileItem.file.status === FileStatus.ADDED;
+  const command = isNew ? 'jetbrains-commit-manager.openFile' : 'jetbrains-commit-manager.openDiff';
+  await vscode.commands.executeCommand(command, uri);
 }
