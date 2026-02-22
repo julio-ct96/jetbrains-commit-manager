@@ -13,7 +13,8 @@ export class ChangelistTreeItem extends vscode.TreeItem {
     this.description = `${changelist.files.length} files`;
     // Distinguish empty vs non-empty changelists for context menus
     if (changelist.isDefault) {
-      this.contextValue = changelist.files.length > 0 ? ContextValues.DefaultChangelistNonEmpty : ContextValues.DefaultChangelist;
+      this.contextValue =
+        changelist.files.length > 0 ? ContextValues.DefaultChangelistNonEmpty : ContextValues.DefaultChangelist;
     } else {
       this.contextValue = changelist.files.length > 0 ? ContextValues.ChangelistNonEmpty : ContextValues.Changelist;
     }
