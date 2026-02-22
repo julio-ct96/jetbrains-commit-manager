@@ -2,7 +2,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { CommandIds, ConfigKeys, ContextKeys, ContextValues, DefaultValues, StatusBarText, ViewIds } from './constants';
-import { GitService } from './gitService';
+import { GitService } from './services';
 import { NativeTreeProvider } from './nativeTreeProvider';
 import { ChangelistTreeItem, FileTreeItem } from './tree-items';
 import { FileItem, FileStatus } from './types';
