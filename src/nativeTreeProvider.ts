@@ -59,12 +59,20 @@ export class FileTreeItem extends vscode.TreeItem {
     // Add checkbox behavior - use checkboxState for native checkboxes
     this.checkboxState = file.isSelected ? vscode.TreeItemCheckboxState.Checked : vscode.TreeItemCheckboxState.Unchecked;
 
-    // Add command to open diff on click
-    this.command = {
+    // Untracked/added files have no HEAD version, so open directly; others open diff
+    const isNewFile = file.status === FileStatus.UNTRACKED || file.status === FileStatus.ADDED;
+    const openFileCommand: vscode.Command = {
+      command: 'jetbrains-commit-manager.openFile',
+      title: 'Open File',
+      arguments: [this.resourceUri],
+    };
+    const openDiffCommand: vscode.Command = {
       command: 'jetbrains-commit-manager.openDiff',
       title: 'Open Diff',
       arguments: [this.resourceUri],
     };
+    
+    this.command = isNewFile ? openFileCommand : openDiffCommand;
   }
 }
 

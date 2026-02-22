@@ -142,7 +142,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }),
 
-    // Open a diff for a file from the tree
+    // Open a diff for a file from the tree (only called for tracked files with HEAD history)
     vscode.commands.registerCommand('jetbrains-commit-manager.openDiff', async (uri: vscode.Uri) => {
       try {
         // Build a proper git-scheme URI with JSON query as expected by Git extension
@@ -150,7 +150,7 @@ export function activate(context: vscode.ExtensionContext) {
           scheme: 'git',
           path: uri.fsPath,
           query: JSON.stringify({ path: uri.fsPath, ref: 'HEAD' }),
-        });
+        }); 
 
         const right = uri; // working tree
         const fileName = uri.fsPath.split('/').pop() || 'file';
