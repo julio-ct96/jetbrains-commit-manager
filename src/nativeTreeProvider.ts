@@ -4,7 +4,10 @@ import { GitService } from './gitService';
 import { Changelist, FileItem, FileStatus } from './types';
 
 export class ChangelistTreeItem extends vscode.TreeItem {
-  constructor(public readonly changelist: Changelist, public readonly collapsibleState: vscode.TreeItemCollapsibleState) {
+  constructor(
+    public readonly changelist: Changelist,
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+  ) {
     super(changelist.name, collapsibleState);
     this.id = `changelist-${changelist.id}`;
     this.tooltip = changelist.description || changelist.name;
@@ -45,7 +48,11 @@ export class ChangelistTreeItem extends vscode.TreeItem {
 }
 
 export class FileTreeItem extends vscode.TreeItem {
-  constructor(public readonly file: FileItem, public readonly workspaceRoot: string, public readonly changelistId?: string) {
+  constructor(
+    public readonly file: FileItem,
+    public readonly workspaceRoot: string,
+    public readonly changelistId?: string,
+  ) {
     super(file.name, vscode.TreeItemCollapsibleState.None);
     this.tooltip = file.path;
     this.description = file.path; // Show relative project path instead of status
@@ -57,7 +64,9 @@ export class FileTreeItem extends vscode.TreeItem {
     this.resourceUri = vscode.Uri.file(fullPath);
 
     // Add checkbox behavior - use checkboxState for native checkboxes
-    this.checkboxState = file.isSelected ? vscode.TreeItemCheckboxState.Checked : vscode.TreeItemCheckboxState.Unchecked;
+    this.checkboxState = file.isSelected
+      ? vscode.TreeItemCheckboxState.Checked
+      : vscode.TreeItemCheckboxState.Unchecked;
 
     // Untracked/added files have no HEAD version, so open directly; others open diff
     const isNewFile = file.status === FileStatus.UNTRACKED || file.status === FileStatus.ADDED;
@@ -71,13 +80,16 @@ export class FileTreeItem extends vscode.TreeItem {
       title: 'Open Diff',
       arguments: [this.resourceUri],
     };
-    
+
     this.command = isNewFile ? openFileCommand : openDiffCommand;
   }
 }
 
 export class UnversionedSectionTreeItem extends vscode.TreeItem {
-  constructor(public readonly unversionedFiles: FileItem[], collapsibleState: vscode.TreeItemCollapsibleState) {
+  constructor(
+    public readonly unversionedFiles: FileItem[],
+    collapsibleState: vscode.TreeItemCollapsibleState,
+  ) {
     super('Unversioned Files', collapsibleState);
     this.id = 'unversioned-section';
     this.contextValue = 'unversionedSection';
@@ -114,10 +126,10 @@ export class UnversionedSectionTreeItem extends vscode.TreeItem {
 export class NativeTreeProvider
   implements vscode.TreeDataProvider<vscode.TreeItem>, vscode.TreeDragAndDropController<vscode.TreeItem>
 {
-  private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<
-    vscode.TreeItem | undefined | null | void
-  >();
-  readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+  private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> =
+    new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
+  readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> =
+    this._onDidChangeTreeData.event;
 
   private _onForceExpand: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
   readonly onForceExpand: vscode.Event<void> = this._onForceExpand.event;
@@ -585,8 +597,8 @@ export class NativeTreeProvider
   }
 
   getChangelistTreeItems(): ChangelistTreeItem[] {
-    return this.changelists.map((changelist) =>
-      new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist))
+    return this.changelists.map(
+      (changelist) => new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist)),
     );
   }
 
@@ -620,7 +632,7 @@ export class NativeTreeProvider
   async handleDrag(
     source: readonly vscode.TreeItem[],
     dataTransfer: vscode.DataTransfer,
-    token: vscode.CancellationToken
+    token: vscode.CancellationToken,
   ): Promise<void> {
     const fileIds: string[] = [];
     const changelistIds: string[] = [];
@@ -640,7 +652,7 @@ export class NativeTreeProvider
     if (changelistIds.length > 0) {
       dataTransfer.set(
         'application/vnd.code.tree.jetbrains-commit-manager.changelist',
-        new vscode.DataTransferItem(changelistIds)
+        new vscode.DataTransferItem(changelistIds),
       );
     }
   }
@@ -648,7 +660,7 @@ export class NativeTreeProvider
   async handleDrop(
     target: vscode.TreeItem | undefined,
     dataTransfer: vscode.DataTransfer,
-    token: vscode.CancellationToken
+    token: vscode.CancellationToken,
   ): Promise<void> {
     if (!target) {
       return;

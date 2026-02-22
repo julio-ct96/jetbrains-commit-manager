@@ -3,10 +3,10 @@ import { Changelist, FileItem, FileStatus } from './types';
 import { GitService } from './gitService';
 
 export class CustomTreeViewProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-  private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> = new vscode.EventEmitter<
-    vscode.TreeItem | undefined | null | void
-  >();
-  readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+  private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | null | void> =
+    new vscode.EventEmitter<vscode.TreeItem | undefined | null | void>();
+  readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> =
+    this._onDidChangeTreeData.event;
 
   private changelists: Changelist[] = [];
   private unversionedFiles: FileItem[] = [];
@@ -69,8 +69,8 @@ export class CustomTreeViewProvider implements vscode.TreeDataProvider<vscode.Tr
             changelist,
             changelist.files.length > 0
               ? vscode.TreeItemCollapsibleState.Expanded
-              : vscode.TreeItemCollapsibleState.Collapsed
-          )
+              : vscode.TreeItemCollapsibleState.Collapsed,
+          ),
       );
     }
 
@@ -195,7 +195,10 @@ export class CustomTreeViewProvider implements vscode.TreeDataProvider<vscode.Tr
 }
 
 export class ChangelistTreeItem extends vscode.TreeItem {
-  constructor(public readonly changelist: Changelist, public readonly collapsibleState: vscode.TreeItemCollapsibleState) {
+  constructor(
+    public readonly changelist: Changelist,
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+  ) {
     super(changelist.name, collapsibleState);
     this.tooltip = changelist.description || changelist.name;
     this.description = `${changelist.files.length} files`;
@@ -208,7 +211,10 @@ export class ChangelistTreeItem extends vscode.TreeItem {
 }
 
 export class FileTreeItem extends vscode.TreeItem {
-  constructor(public readonly file: FileItem, public readonly changelistId?: string) {
+  constructor(
+    public readonly file: FileItem,
+    public readonly changelistId?: string,
+  ) {
     super(file.name, vscode.TreeItemCollapsibleState.None);
     this.tooltip = file.path;
     this.description = this.getStatusDescription(file.status);

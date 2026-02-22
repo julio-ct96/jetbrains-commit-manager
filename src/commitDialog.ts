@@ -3,7 +3,9 @@ import { FileItem } from './types';
 
 export class CommitDialog {
   private panel: vscode.WebviewPanel | undefined;
-  private resolvePromise: ((value: { message: string; files: FileItem[]; amend: boolean } | undefined) => void) | undefined;
+  private resolvePromise:
+    | ((value: { message: string; files: FileItem[]; amend: boolean } | undefined) => void)
+    | undefined;
 
   constructor(private files: FileItem[]) {}
 
@@ -50,7 +52,7 @@ export class CommitDialog {
         <span class="file-status ${file.status}">${file.status}</span>
         <span class="file-path">${file.relativePath}</span>
       </div>
-    `
+    `,
       )
       .join('');
 
