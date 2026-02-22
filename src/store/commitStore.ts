@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { DefaultValues } from '../constants';
-import { GitService } from '../gitService';
+import { GitService } from '../services';
 import { Changelist, FileItem, FileStatus } from '../types';
 
 export class CommitStore {

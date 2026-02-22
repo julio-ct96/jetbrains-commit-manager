@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { DefaultValues, DragDropMimeTypes } from './constants';
-import { GitService } from './gitService';
+import { GitService } from './services';
 import { CommitStore } from './store';
 import { ChangelistTreeItem, FileTreeItem, UnversionedSectionTreeItem } from './tree-items';
 import { Changelist, FileItem } from './types';
