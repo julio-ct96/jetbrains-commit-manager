@@ -3,7 +3,8 @@
 import * as vscode from 'vscode';
 import { CommandIds, ConfigKeys, ContextKeys, ContextValues, DefaultValues, StatusBarText, ViewIds } from './constants';
 import { GitService } from './gitService';
-import { ChangelistTreeItem, FileTreeItem, NativeTreeProvider } from './nativeTreeProvider';
+import { NativeTreeProvider } from './nativeTreeProvider';
+import { ChangelistTreeItem, FileTreeItem } from './tree-items';
 import { FileItem, FileStatus } from './types';
 
 let treeProvider: NativeTreeProvider;
