@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CommandIds, ConfigKeys, StatusBarText } from '../constants';
+import { CommandIds, ConfigKeys } from '../constants';
 import { CommandDependencies } from './types';
 
 export function registerMiscCommands(deps: CommandDependencies): vscode.Disposable[] {
@@ -16,11 +16,11 @@ export function registerMiscCommands(deps: CommandDependencies): vscode.Disposab
       const message = await vscode.window.showInputBox({
         prompt: 'Enter commit message',
         placeHolder: 'Describe your changes...',
-        value: deps.statusBar.commitMessageInput.text.replace(StatusBarText.MessagePrefix, ''),
+        value: deps.statusBar.getMessageText(),
       });
 
       if (message !== undefined) {
-        deps.statusBar.commitMessageInput.text = `${StatusBarText.MessagePrefix}${message}`;
+        deps.statusBar.setMessageText(message);
       }
     }),
 

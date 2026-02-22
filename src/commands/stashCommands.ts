@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CommandIds, StatusBarText } from '../constants';
+import { CommandIds } from '../constants';
 import { CommandDependencies } from './types';
 
 interface StashFlowOptions {
@@ -30,9 +30,7 @@ async function executeStashFlow(deps: CommandDependencies, options: StashFlowOpt
 
   const defaultMessage = getDefaultStashMessage(deps);
 
-  const defaultValue = options.fromStatusBar
-    ? defaultMessage || deps.statusBar.commitMessageInput.text.replace(StatusBarText.MessagePrefix, '')
-    : defaultMessage;
+  const defaultValue = options.fromStatusBar ? defaultMessage || deps.statusBar.getMessageText() : defaultMessage;
 
   const message = await vscode.window.showInputBox({
     prompt: 'Enter stash message',
@@ -51,7 +49,7 @@ async function executeStashFlow(deps: CommandDependencies, options: StashFlowOpt
     vscode.window.showInformationMessage(`Successfully stashed ${selectedFiles.length} file(s)`);
     deps.store.refresh();
     if (options.fromStatusBar) {
-      deps.statusBar.commitMessageInput.text = StatusBarText.MessagePrefix;
+      deps.statusBar.clearMessage();
     }
   } else {
     vscode.window.showErrorMessage('Failed to stash files. Check the output panel for details.');

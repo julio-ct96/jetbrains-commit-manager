@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CommandIds, StatusBarText } from '../constants';
+import { CommandIds } from '../constants';
 import { CommandDependencies } from './types';
 
 interface CommitFlowOptions {
@@ -14,9 +14,7 @@ async function executeCommitFlow(deps: CommandDependencies, options: CommitFlowO
     return;
   }
 
-  const defaultValue = options.fromStatusBar
-    ? deps.statusBar.commitMessageInput.text.replace(StatusBarText.MessagePrefix, '')
-    : undefined;
+  const defaultValue = options.fromStatusBar ? deps.statusBar.getMessageText() : undefined;
 
   const message = await vscode.window.showInputBox({
     prompt: 'Enter commit message',
@@ -45,7 +43,7 @@ async function executeCommitFlow(deps: CommandDependencies, options: CommitFlowO
   const snapshot = deps.store.removeCommittedFiles(committedIds);
 
   if (options.fromStatusBar) {
-    deps.statusBar.commitMessageInput.text = StatusBarText.MessagePrefix;
+    deps.statusBar.clearMessage();
   }
 
   const success = await deps.gitService.commitFiles(selectedFiles, message.trim(), { amend: choice.amend });

@@ -6,6 +6,6 @@ export interface CommandDependencies {
   store: CommitStore;
   gitService: GitService;
   treeView: vscode.TreeView<vscode.TreeItem>;
-  statusBar: { commitMessageInput: vscode.StatusBarItem };
+  statusBar: { getMessageText(): string; setMessageText(text: string): void; clearMessage(): void };
   fileWatcher: { skipNextRefresh(): void };
 }
