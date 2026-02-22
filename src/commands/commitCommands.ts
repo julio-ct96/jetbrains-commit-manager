@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { CommandIds } from '../constants';
+import { executeWithOptimisticUI } from '../utils';
 import { CommandDependencies } from './types';
 
 interface CommitFlowOptions {
@@ -8,11 +9,8 @@ interface CommitFlowOptions {
 
 async function executeCommitFlow(deps: CommandDependencies, options: CommitFlowOptions = {}): Promise<void> {
   const selectedFiles = deps.store.getSelectedFiles();
-
-  if (selectedFiles.length === 0) {
-    vscode.window.showWarningMessage('No files selected for commit. Please select files first.');
-    return;
-  }
+  if (selectedFiles.length === 0)
+    return void vscode.window.showWarningMessage('No files selected for commit. Please select files first.');
 
   const defaultValue = options.fromStatusBar ? deps.statusBar.getMessageText() : undefined;
 
@@ -38,27 +36,25 @@ async function executeCommitFlow(deps: CommandDependencies, options: CommitFlowO
   );
   if (!choice) return;
 
-  const committedIds = new Set(selectedFiles.map((f) => f.id));
-  deps.fileWatcher.skipNextRefresh();
-  const snapshot = deps.store.removeCommittedFiles(committedIds);
-
   if (options.fromStatusBar) {
     deps.statusBar.clearMessage();
   }
 
-  const success = await deps.gitService.commitFiles(selectedFiles, message.trim(), { amend: choice.amend });
+  const committedIds = new Set(selectedFiles.map((f) => f.id));
+  const success = await executeWithOptimisticUI({
+    store: deps.store,
+    fileIds: committedIds,
+    fileWatcher: deps.fileWatcher,
+    operation: () => deps.gitService.commitFiles(selectedFiles, message.trim(), { amend: choice.amend }),
+    onSuccess: () => vscode.window.showInformationMessage(`Successfully committed ${selectedFiles.length} file(s)`),
+    onFailure: () => vscode.window.showErrorMessage('Failed to commit files. Check the output panel for details.'),
+  });
 
-  if (success) {
-    vscode.window.showInformationMessage(`Successfully committed ${selectedFiles.length} file(s)`);
-    if (choice.push) {
-      const pushed = await deps.gitService.pushCurrentBranch();
-      if (pushed) {
-        vscode.window.showInformationMessage('Pushed to remote successfully');
-      }
+  if (success && choice.push) {
+    const pushed = await deps.gitService.pushCurrentBranch();
+    if (pushed) {
+      vscode.window.showInformationMessage('Pushed to remote successfully');
     }
-  } else {
-    deps.store.restoreFiles(snapshot);
-    vscode.window.showErrorMessage('Failed to commit files. Check the output panel for details.');
   }
 }
 
