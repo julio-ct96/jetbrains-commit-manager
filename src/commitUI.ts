@@ -202,8 +202,8 @@ export class CommitUI {
             e.preventDefault();
             amend = !amend;
             commitButton.textContent = (amend ? 'Amend: ' : '') + (${this.selectedFilesCount} > 0 ? 'Commit (' + ${
-      this.selectedFilesCount
-    } + ')' : 'Commit');
+              this.selectedFilesCount
+            } + ')' : 'Commit');
           });
 
           // Handle commit button click

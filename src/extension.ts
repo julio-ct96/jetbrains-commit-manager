@@ -150,7 +150,7 @@ export function activate(context: vscode.ExtensionContext) {
           scheme: 'git',
           path: uri.fsPath,
           query: JSON.stringify({ path: uri.fsPath, ref: 'HEAD' }),
-        }); 
+        });
 
         const right = uri; // working tree
         const fileName = uri.fsPath.split('/').pop() || 'file';
@@ -242,7 +242,7 @@ export function activate(context: vscode.ExtensionContext) {
       const confirm = await vscode.window.showWarningMessage(
         `Are you sure you want to delete changelist "${changelistName}"?`,
         { modal: true },
-        'Delete'
+        'Delete',
       );
 
       if (confirm === 'Delete') {
@@ -334,7 +334,7 @@ export function activate(context: vscode.ExtensionContext) {
             { label: 'Commit and Push', amend: false, push: true },
             { label: 'Amend Commit and Push', amend: true, push: true },
           ],
-          { placeHolder: 'Choose commit action' }
+          { placeHolder: 'Choose commit action' },
         );
         if (!choice) {
           return;
@@ -481,7 +481,7 @@ export function activate(context: vscode.ExtensionContext) {
       const confirm = await vscode.window.showWarningMessage(
         `Are you sure you want to revert ${selectedFiles.length} file(s)? This will discard all uncommitted changes.`,
         { modal: true },
-        'Revert'
+        'Revert',
       );
 
       if (confirm === 'Revert') {
@@ -526,7 +526,7 @@ export function activate(context: vscode.ExtensionContext) {
       const confirm = await vscode.window.showWarningMessage(
         `Revert changes in ${fileToRevert.name}? This discards uncommitted changes.`,
         { modal: true },
-        'Revert'
+        'Revert',
       );
       if (confirm !== 'Revert') {
         return;
@@ -564,7 +564,7 @@ export function activate(context: vscode.ExtensionContext) {
       const confirm = await vscode.window.showWarningMessage(
         `Revert all ${files.length} file(s) in "${changelistName}"? This discards uncommitted changes.`,
         { modal: true },
-        'Revert'
+        'Revert',
       );
       if (confirm !== 'Revert') {
         return;
@@ -631,7 +631,7 @@ export function activate(context: vscode.ExtensionContext) {
             { label: 'Commit and Push', amend: false, push: true },
             { label: 'Amend Commit and Push', amend: true, push: true },
           ],
-          { placeHolder: 'Choose commit action' }
+          { placeHolder: 'Choose commit action' },
         );
         if (!choice) {
           return;
@@ -782,7 +782,10 @@ export function activate(context: vscode.ExtensionContext) {
   // Set up file system watcher to refresh on file changes
   const fileSystemWatcher = vscode.workspace.createFileSystemWatcher('**/*');
   fileSystemWatcher.onDidChange(async (uri) => {
-    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
+    if (skipNextWatcherRefresh) {
+      skipNextWatcherRefresh = false;
+      return;
+    }
     if (treeProvider) {
       // Auto-stage the changed file if the feature is enabled
       const config = vscode.workspace.getConfiguration('jetbrains-commit-manager');
@@ -814,7 +817,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   fileSystemWatcher.onDidCreate(async (uri) => {
-    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
+    if (skipNextWatcherRefresh) {
+      skipNextWatcherRefresh = false;
+      return;
+    }
     if (treeProvider) {
       // Auto-stage the new file if the feature is enabled
       const config = vscode.workspace.getConfiguration('jetbrains-commit-manager');
@@ -846,7 +852,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
   fileSystemWatcher.onDidDelete(() => {
-    if (skipNextWatcherRefresh) { skipNextWatcherRefresh = false; return; }
+    if (skipNextWatcherRefresh) {
+      skipNextWatcherRefresh = false;
+      return;
+    }
     if (treeProvider) {
       treeProvider.refresh();
       updateAllCommitUI();

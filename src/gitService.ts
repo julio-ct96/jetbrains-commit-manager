@@ -363,7 +363,7 @@ export class GitService {
 
   private async executeGitCommand(
     args: string[],
-    options?: { retryOnLock?: boolean }
+    options?: { retryOnLock?: boolean },
   ): Promise<{ stdout: string; stderr: string }> {
     const retryOnLock = options?.retryOnLock !== false;
     try {
