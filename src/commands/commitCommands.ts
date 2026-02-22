@@ -67,6 +67,8 @@ async function executeCommitFlow(deps: CommandDependencies, options: CommitFlowO
 export function registerCommitCommands(deps: CommandDependencies): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand(CommandIds.CommitSelectedFiles, () => executeCommitFlow(deps)),
-    vscode.commands.registerCommand(CommandIds.CommitFromStatusBar, () => executeCommitFlow(deps, { fromStatusBar: true })),
+    vscode.commands.registerCommand(CommandIds.CommitFromStatusBar, () =>
+      executeCommitFlow(deps, { fromStatusBar: true }),
+    ),
   ];
 }
