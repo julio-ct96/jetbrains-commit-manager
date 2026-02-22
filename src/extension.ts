@@ -7,275 +7,171 @@ import { NativeTreeProvider } from './nativeTreeProvider';
 import { ChangelistTreeItem, FileTreeItem } from './tree-items';
 import { FileStatus } from './types';
 
-let treeProvider: NativeTreeProvider;
-let treeView: vscode.TreeView<vscode.TreeItem>;
-let gitService: GitService;
-let commitStore: CommitStore;
 let commitStatusBarItem: vscode.StatusBarItem;
 let commitMessageInput: vscode.StatusBarItem;
-let isExpanded: boolean = false; // Track expand/collapse state
-let skipNextWatcherRefresh = false;
 
 export function activate(context: vscode.ExtensionContext) {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
-    vscode.window.showWarningMessage('No workspace folder found. Please open a folder to use the commit manager.');
+    return vscode.window.showWarningMessage(
+      'No workspace folder found. Please open a folder to use the commit manager.',
+    );
   }
 
-  if (workspaceRoot) {
-    gitService = new GitService(workspaceRoot);
-    commitStore = new CommitStore(gitService);
-    treeProvider = new NativeTreeProvider(commitStore, workspaceRoot);
+  const gitService = new GitService(workspaceRoot);
+  const store = new CommitStore(gitService);
+  const treeProvider = new NativeTreeProvider(store, workspaceRoot);
 
-    // Create the tree view
-    treeView = vscode.window.createTreeView(ViewIds.Changelists, {
-      treeDataProvider: treeProvider,
-      showCollapseAll: true,
-      canSelectMany: true,
-      dragAndDropController: treeProvider,
-    });
+  const treeView = vscode.window.createTreeView(ViewIds.Changelists, {
+    treeDataProvider: treeProvider,
+    showCollapseAll: true,
+    canSelectMany: true,
+    dragAndDropController: treeProvider,
+  });
 
-    // Listen for tree data changes to update UI
-    treeProvider.onDidChangeTreeData(() => {
-      updateCommitButtonContext();
-      updateAllCommitUI();
-    });
-
-    // Handle collapse all to toggle to expand all
-    treeView.onDidCollapseElement((e) => {
-      // When user manually collapses items, update our state and the changelist state
-      if (e.element instanceof ChangelistTreeItem) {
-        const changelistItem = e.element as ChangelistTreeItem;
-        const changelist = commitStore.getChangelists().find((c) => c.id === changelistItem.changelist.id);
-        if (changelist) {
-          changelist.isExpanded = false;
-        }
-      } else if (e.element.contextValue === ContextValues.UnversionedSection) {
-      }
-      // Check if all changelists are collapsed
-      const allCollapsed = commitStore.getChangelists().every((c) => c.files.length === 0 || !c.isExpanded);
-      isExpanded = !allCollapsed;
-    });
-
-    treeView.onDidExpandElement((e) => {
-      // When user manually expands items, update our state and the changelist state
-      if (e.element instanceof ChangelistTreeItem) {
-        const changelistItem = e.element as ChangelistTreeItem;
-        const changelist = commitStore.getChangelists().find((c) => c.id === changelistItem.changelist.id);
-        if (changelist) {
-          changelist.isExpanded = true;
-        }
-      } else if (e.element.contextValue === ContextValues.UnversionedSection) {
-      }
-      // Check if any changelist is expanded
-      const anyExpanded = commitStore.getChangelists().some((c) => c.files.length > 0 && c.isExpanded);
-      isExpanded = anyExpanded;
-    });
-
-    // Preview file on selection change (click or space)
-    treeView.onDidChangeSelection((e) => {
-      const selected = e.selection[0];
-      if (selected instanceof FileTreeItem) {
-        previewFileTreeItem(selected);
-      }
-    });
-
-    // Handle checkbox state changes
-    treeView.onDidChangeCheckboxState((e) => {
-      treeProvider.onDidChangeCheckboxState(e);
-      updateAllCommitUI();
-      updateCommitButtonContext();
-    });
-
-    // Listen for new changelist creation events
-    commitStore.onChangelistCreated(async (changelistId: string) => {
-      try {
-        setTimeout(async () => {
-          const changelistItem = treeProvider.getChangelistTreeItemById(changelistId);
-          if (changelistItem && changelistItem.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
-            await treeView.reveal(changelistItem, { expand: true, select: false, focus: false });
-          }
-        }, 200);
-      } catch (error) {
-        // Silently handle errors
-      }
-    });
-
-    // Listen for changelist auto-expand events (when files are moved/dropped)
-    commitStore.onChangelistAutoExpand(async (changelistId: string) => {
-      try {
-        setTimeout(async () => {
-          const changelistItem = treeProvider.getChangelistTreeItemById(changelistId);
-          if (changelistItem && changelistItem.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
-            await treeView.reveal(changelistItem, { expand: true, select: false, focus: false });
-          }
-        }, 200);
-      } catch (error) {
-        // Silently handle errors
-      }
-    });
-
-    // Create status bar items for commit functionality
-    createCommitStatusBarItems();
-
-    // Initialize commit button context
-    updateCommitButtonContext();
-
-    // Build command dependencies
-    const deps: CommandDependencies = {
-      store: commitStore,
-      gitService,
-      treeView,
-      statusBar: { commitMessageInput },
-      fileWatcher: {
-        skipNextRefresh() {
-          skipNextWatcherRefresh = true;
-        },
-      },
-    };
-
-    // Register all command modules
-    const commands = registerAllCommands(deps);
-
-    context.subscriptions.push(...commands);
-    context.subscriptions.push(treeView);
-
-    commitStore.refresh();
-    updateAllCommitUI();
-  }
-
-  // Function to update commit button context based on file selection
-  function updateCommitButtonContext() {
-    const selectedFiles = commitStore.getSelectedFiles();
+  // Reactive subscription: store changes → update status bar + context keys
+  store.onDidChange(() => {
+    const selectedFiles = store.getSelectedFiles();
     const hasSelectedFiles = selectedFiles.length > 0;
     vscode.commands.executeCommand(CommandIds.SetContext, ContextKeys.HasSelectedFiles, hasSelectedFiles);
 
-    const stagedCount = commitStore.getChangelists().reduce((sum, c) => sum + c.files.length, 0);
+    const stagedCount = store.getChangelists().reduce((sum, c) => sum + c.files.length, 0);
     treeView.badge = stagedCount > 0 ? { value: stagedCount, tooltip: `${stagedCount} staged files` } : undefined;
-  }
 
-  // Set up file system watcher to refresh on file changes
-  const fileSystemWatcher = vscode.workspace.createFileSystemWatcher('**/*');
-  fileSystemWatcher.onDidChange(async (uri) => {
-    if (skipNextWatcherRefresh) {
-      skipNextWatcherRefresh = false;
-      return;
-    }
-    if (commitStore) {
-      // Auto-stage the changed file if the feature is enabled
-      const config = vscode.workspace.getConfiguration(ConfigKeys.Namespace);
-      const autoStageEnabled = config.get<boolean>(ConfigKeys.AutoStageFiles, true);
-
-      if (autoStageEnabled && gitService) {
-        const relativePath = vscode.workspace.asRelativePath(uri);
-
-        // Skip auto-staging for certain file types
-        if (shouldSkipAutoStage(relativePath)) {
-          return;
-        }
-
-        // Only auto-stage files that are already tracked by Git
-        const isTracked = await gitService.isFileTracked(relativePath);
-        if (!isTracked) {
-          return;
-        }
-
-        try {
-          await gitService.stageFile(relativePath);
-        } catch (error) {
-          console.error(`Failed to auto-stage file ${relativePath}:`, error);
-        }
-      }
-
-      commitStore.refresh();
-      updateAllCommitUI();
-    }
-  });
-  fileSystemWatcher.onDidCreate(async (uri) => {
-    if (skipNextWatcherRefresh) {
-      skipNextWatcherRefresh = false;
-      return;
-    }
-    if (commitStore) {
-      // Auto-stage the new file if the feature is enabled
-      const config = vscode.workspace.getConfiguration(ConfigKeys.Namespace);
-      const autoStageEnabled = config.get<boolean>(ConfigKeys.AutoStageFiles, true);
-
-      if (autoStageEnabled && gitService) {
-        const relativePath = vscode.workspace.asRelativePath(uri);
-
-        // Skip auto-staging for certain file types
-        if (shouldSkipAutoStage(relativePath)) {
-          return;
-        }
-
-        // Only auto-stage files that are already tracked by Git
-        const isTracked = await gitService.isFileTracked(relativePath);
-        if (!isTracked) {
-          return;
-        }
-
-        try {
-          await gitService.stageFile(relativePath);
-        } catch (error) {
-          console.error(`Failed to auto-stage file ${relativePath}:`, error);
-        }
-      }
-
-      commitStore.refresh();
-      updateAllCommitUI();
-    }
-  });
-  fileSystemWatcher.onDidDelete(() => {
-    if (skipNextWatcherRefresh) {
-      skipNextWatcherRefresh = false;
-      return;
-    }
-    if (commitStore) {
-      commitStore.refresh();
-      updateAllCommitUI();
+    const totalFiles = store.getAllFiles().length;
+    if (selectedFiles.length > 0) {
+      commitStatusBarItem.text = `$(check) Commit (${selectedFiles.length}/${totalFiles})`;
+      commitStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
+    } else {
+      commitStatusBarItem.text = '$(check) Commit';
+      commitStatusBarItem.backgroundColor = undefined;
     }
   });
 
-  context.subscriptions.push(fileSystemWatcher);
-}
+  // Track collapse/expand state via store API
+  treeView.onDidCollapseElement((e) => {
+    if (e.element instanceof ChangelistTreeItem) {
+      store.setChangelistExpanded(e.element.changelist.id, false);
+    } else if (e.element.contextValue === ContextValues.UnversionedSection) {
+      store.setUnversionedExpanded(false);
+    }
+  });
 
-function createCommitStatusBarItems() {
-  // Create commit button in status bar
+  treeView.onDidExpandElement((e) => {
+    if (e.element instanceof ChangelistTreeItem) {
+      store.setChangelistExpanded(e.element.changelist.id, true);
+    } else if (e.element.contextValue === ContextValues.UnversionedSection) {
+      store.setUnversionedExpanded(true);
+    }
+  });
+
+  // Preview file on selection change
+  treeView.onDidChangeSelection((e) => {
+    const selected = e.selection[0];
+    if (selected instanceof FileTreeItem) {
+      previewFileTreeItem(selected);
+    }
+  });
+
+  // Handle checkbox state changes
+  treeView.onDidChangeCheckboxState((e) => {
+    treeProvider.onDidChangeCheckboxState(e);
+  });
+
+  // Auto-expand on changelist creation
+  store.onChangelistCreated(async (changelistId: string) => {
+    try {
+      setTimeout(async () => {
+        const changelistItem = treeProvider.getChangelistTreeItemById(changelistId);
+        if (changelistItem && changelistItem.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+          await treeView.reveal(changelistItem, { expand: true, select: false, focus: false });
+        }
+      }, 200);
+    } catch (error) {
+      // Silently handle errors
+    }
+  });
+
+  // Auto-expand on file move/drop
+  store.onChangelistAutoExpand(async (changelistId: string) => {
+    try {
+      setTimeout(async () => {
+        const changelistItem = treeProvider.getChangelistTreeItemById(changelistId);
+        if (changelistItem && changelistItem.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+          await treeView.reveal(changelistItem, { expand: true, select: false, focus: false });
+        }
+      }, 200);
+    } catch (error) {
+      // Silently handle errors
+    }
+  });
+
+  // Create status bar items
   commitStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   commitStatusBarItem.command = CommandIds.CommitFromStatusBar;
   commitStatusBarItem.tooltip = 'Commit selected files';
   commitStatusBarItem.show();
 
-  // Create commit message input in status bar
   commitMessageInput = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
   commitMessageInput.command = CommandIds.UpdateCommitMessage;
   commitMessageInput.tooltip = 'Click to edit commit message';
   commitMessageInput.text = StatusBarText.MessagePrefix;
   commitMessageInput.show();
 
-  updateAllCommitUI();
-}
+  // File system watcher with auto-stage
+  let skipNextWatcherRefresh = false;
 
-function updateCommitStatusBar() {
-  if (!commitStore) {
-    return;
-  }
+  const handleFileSystemEvent = async (uri?: vscode.Uri) => {
+    if (skipNextWatcherRefresh) {
+      skipNextWatcherRefresh = false;
+      return;
+    }
 
-  const selectedFiles = commitStore.getSelectedFiles();
-  const totalFiles = commitStore.getAllFiles().length;
+    if (uri) {
+      const config = vscode.workspace.getConfiguration(ConfigKeys.Namespace);
+      const autoStageEnabled = config.get<boolean>(ConfigKeys.AutoStageFiles, true);
 
-  if (selectedFiles.length > 0) {
-    commitStatusBarItem.text = `$(check) Commit (${selectedFiles.length}/${totalFiles})`;
-    commitStatusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
-  } else {
-    commitStatusBarItem.text = '$(check) Commit';
-    commitStatusBarItem.backgroundColor = undefined;
-  }
-}
+      if (autoStageEnabled) {
+        const relativePath = vscode.workspace.asRelativePath(uri);
+        if (!shouldSkipAutoStage(relativePath)) {
+          const isTracked = await gitService.isFileTracked(relativePath);
+          if (isTracked) {
+            try {
+              await gitService.stageFile(relativePath);
+            } catch (error) {
+              console.error(`Failed to auto-stage file ${relativePath}:`, error);
+            }
+          }
+        }
+      }
+    }
 
-function updateAllCommitUI() {
-  updateCommitStatusBar();
+    store.refresh();
+  };
+
+  const fileSystemWatcher = vscode.workspace.createFileSystemWatcher('**/*');
+  fileSystemWatcher.onDidChange((uri) => handleFileSystemEvent(uri));
+  fileSystemWatcher.onDidCreate((uri) => handleFileSystemEvent(uri));
+  fileSystemWatcher.onDidDelete(() => handleFileSystemEvent());
+
+  // Build command dependencies
+  const deps: CommandDependencies = {
+    store,
+    gitService,
+    treeView,
+    statusBar: { commitMessageInput },
+    fileWatcher: {
+      skipNextRefresh() {
+        skipNextWatcherRefresh = true;
+      },
+    },
+  };
+
+  const commands = registerAllCommands(deps);
+
+  context.subscriptions.push(...commands, treeView, fileSystemWatcher);
+
+  store.refresh();
 }
 
 export function deactivate() {
@@ -287,17 +183,13 @@ export function deactivate() {
   }
 }
 
-// Helper function to determine if a file should be skipped for auto-staging
 function shouldSkipAutoStage(filePath: string): boolean {
   const skipPatterns = [
-    // Temporary files
     /\.tmp$/,
     /\.temp$/,
     /\.swp$/,
     /\.swo$/,
     /~$/,
-
-    // Build artifacts
     /\.log$/,
     /\.out$/,
     /\.exe$/,
@@ -307,28 +199,18 @@ function shouldSkipAutoStage(filePath: string): boolean {
     /\.o$/,
     /\.obj$/,
     /\.class$/,
-
-    // IDE and editor files
     /\.vscode\//,
     /\.idea\//,
     /\.vs\//,
     /\.DS_Store$/,
     /Thumbs\.db$/,
-
-    // Node.js
     /node_modules\//,
     /npm-debug\.log$/,
     /yarn-error\.log$/,
-
-    // Git
     /\.git\//,
-
-    // Package managers
     /package-lock\.json$/,
     /yarn\.lock$/,
     /pnpm-lock\.yaml$/,
-
-    // Environment files
     /\.env$/,
     /\.env\.local$/,
     /\.env\.development$/,
@@ -338,12 +220,9 @@ function shouldSkipAutoStage(filePath: string): boolean {
   return skipPatterns.some((pattern) => pattern.test(filePath));
 }
 
-// Preview a file tree item (reuses the same commands as click handlers)
 async function previewFileTreeItem(fileItem: FileTreeItem): Promise<void> {
   const uri = fileItem.resourceUri;
-  if (!uri) {
-    return;
-  }
+  if (!uri) return;
   const isNew = fileItem.file.status === FileStatus.Untracked || fileItem.file.status === FileStatus.Added;
   const command = isNew ? CommandIds.OpenFile : CommandIds.OpenDiff;
   await vscode.commands.executeCommand(command, uri);

@@ -279,6 +279,11 @@ export class CommitStore {
     this._unversionedFilesExpanded = expanded;
   }
 
+  setChangelistExpanded(changelistId: string, expanded: boolean): void {
+    const changelist = this.changelists.find((c) => c.id === changelistId);
+    if (changelist) changelist.isExpanded = expanded;
+  }
+
   // --- Private ---
 
   private initializeDefaultChangelist(): void {
