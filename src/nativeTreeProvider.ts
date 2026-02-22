@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { CommandIds, ContextValues, DefaultValues, DragDropMimeTypes } from './constants';
 import { GitService } from './gitService';
 import { Changelist, FileItem, FileStatus } from './types';
 
@@ -14,9 +15,9 @@ export class ChangelistTreeItem extends vscode.TreeItem {
     this.description = `${changelist.files.length} files`;
     // Distinguish empty vs non-empty changelists for context menus
     if (changelist.isDefault) {
-      this.contextValue = changelist.files.length > 0 ? 'defaultChangelistNonEmpty' : 'defaultChangelist';
+      this.contextValue = changelist.files.length > 0 ? ContextValues.DefaultChangelistNonEmpty : ContextValues.DefaultChangelist;
     } else {
-      this.contextValue = changelist.files.length > 0 ? 'changelistNonEmpty' : 'changelist';
+      this.contextValue = changelist.files.length > 0 ? ContextValues.ChangelistNonEmpty : ContextValues.Changelist;
     }
     this.iconPath = undefined; // Remove prefix icons from changelists
 
@@ -56,7 +57,7 @@ export class FileTreeItem extends vscode.TreeItem {
     super(file.name, vscode.TreeItemCollapsibleState.None);
     this.tooltip = file.path;
     this.description = file.path; // Show relative project path instead of status
-    this.contextValue = 'file';
+    this.contextValue = ContextValues.File;
     this.iconPath = undefined; // Remove prefix icons
 
     // Resolve the file path relative to workspace root
@@ -69,14 +70,14 @@ export class FileTreeItem extends vscode.TreeItem {
       : vscode.TreeItemCheckboxState.Unchecked;
 
     // Untracked/added files have no HEAD version, so open directly; others open diff
-    const isNewFile = file.status === FileStatus.UNTRACKED || file.status === FileStatus.ADDED;
+    const isNewFile = file.status === FileStatus.Untracked || file.status === FileStatus.Added;
     const openFileCommand: vscode.Command = {
-      command: 'jetbrains-commit-manager.openFile',
+      command: CommandIds.OpenFile,
       title: 'Open File',
       arguments: [this.resourceUri],
     };
     const openDiffCommand: vscode.Command = {
-      command: 'jetbrains-commit-manager.openDiff',
+      command: CommandIds.OpenDiff,
       title: 'Open Diff',
       arguments: [this.resourceUri],
     };
@@ -91,8 +92,8 @@ export class UnversionedSectionTreeItem extends vscode.TreeItem {
     collapsibleState: vscode.TreeItemCollapsibleState,
   ) {
     super('Unversioned Files', collapsibleState);
-    this.id = 'unversioned-section';
-    this.contextValue = 'unversionedSection';
+    this.id = DefaultValues.UnversionedSectionId;
+    this.contextValue = ContextValues.UnversionedSection;
     this.iconPath = undefined; // Remove prefix icon from unversioned files section
     this.description = `${unversionedFiles.length} files`;
 
@@ -142,12 +143,12 @@ export class NativeTreeProvider
 
   // Drag and drop support
   readonly dropMimeTypes = [
-    'application/vnd.code.tree.jetbrains-commit-manager',
-    'application/vnd.code.tree.jetbrains-commit-manager.changelist',
+    DragDropMimeTypes.TreeItem,
+    DragDropMimeTypes.Changelist,
   ];
   readonly dragMimeTypes = [
-    'application/vnd.code.tree.jetbrains-commit-manager',
-    'application/vnd.code.tree.jetbrains-commit-manager.changelist',
+    DragDropMimeTypes.TreeItem,
+    DragDropMimeTypes.Changelist,
   ];
 
   private changelists: Changelist[] = [];
@@ -164,9 +165,9 @@ export class NativeTreeProvider
 
   private initializeDefaultChangelist() {
     const defaultChangelist: Changelist = {
-      id: 'default',
-      name: 'Changes',
-      description: 'Default changelist',
+      id: DefaultValues.DefaultChangelistId,
+      name: DefaultValues.DefaultChangelistName,
+      description: DefaultValues.DefaultChangelistDescription,
       files: [],
       isDefault: true,
       isExpanded: false, // Start collapsed to match VS Code's default behavior
@@ -196,7 +197,7 @@ export class NativeTreeProvider
       changelist.files = changelist.files.filter((f) => !fileIds.has(f.id));
     }
     const removedUnversioned = this.unversionedFiles.filter((f) => fileIds.has(f.id));
-    if (removedUnversioned.length > 0) snapshot.set('__unversioned__', removedUnversioned);
+    if (removedUnversioned.length > 0) snapshot.set(DefaultValues.UnversionedSnapshotKey, removedUnversioned);
     this.unversionedFiles = this.unversionedFiles.filter((f) => !fileIds.has(f.id));
     this.updateTree();
     return snapshot;
@@ -204,7 +205,7 @@ export class NativeTreeProvider
 
   restoreFiles(snapshot: Map<string, FileItem[]>): void {
     for (const [key, files] of snapshot) {
-      if (key === '__unversioned__') {
+      if (key === DefaultValues.UnversionedSnapshotKey) {
         this.unversionedFiles.push(...files);
         continue;
       }
@@ -264,7 +265,7 @@ export class NativeTreeProvider
         }
 
         // Only add files that are already tracked by Git
-        if (file.status !== FileStatus.UNTRACKED) {
+        if (file.status !== FileStatus.Untracked) {
           const assignedChangelistId = changelistAssignmentMap.get(file.id);
 
           if (assignedChangelistId) {
@@ -488,7 +489,7 @@ export class NativeTreeProvider
           try {
             await this.gitService.addFileToGit(file.path);
             // Update the file status to ADDED since it's now tracked
-            file.status = FileStatus.ADDED;
+            file.status = FileStatus.Added;
           } catch (error) {
             console.error('Error adding file to Git:', error);
             // If adding to Git fails, put the file back in unversioned files
@@ -646,12 +647,12 @@ export class NativeTreeProvider
     }
 
     if (fileIds.length > 0) {
-      dataTransfer.set('application/vnd.code.tree.jetbrains-commit-manager', new vscode.DataTransferItem(fileIds));
+      dataTransfer.set(DragDropMimeTypes.TreeItem, new vscode.DataTransferItem(fileIds));
     }
 
     if (changelistIds.length > 0) {
       dataTransfer.set(
-        'application/vnd.code.tree.jetbrains-commit-manager.changelist',
+        DragDropMimeTypes.Changelist,
         new vscode.DataTransferItem(changelistIds),
       );
     }
@@ -673,14 +674,14 @@ export class NativeTreeProvider
       targetChangelistId = target.changelist.id;
     } else if (target instanceof FileTreeItem) {
       // Dropping on a file - move files to the changelist containing the target file
-      targetChangelistId = target.changelistId || 'default';
+      targetChangelistId = target.changelistId || DefaultValues.DefaultChangelistId;
     } else {
       // Unknown target type
       return;
     }
 
     // Handle file drops
-    const fileTransferItem = dataTransfer.get('application/vnd.code.tree.jetbrains-commit-manager');
+    const fileTransferItem = dataTransfer.get(DragDropMimeTypes.TreeItem);
     if (fileTransferItem) {
       try {
         const fileIds = fileTransferItem.value as string[];
@@ -696,7 +697,7 @@ export class NativeTreeProvider
     }
 
     // Handle changelist drops
-    const changelistTransferItem = dataTransfer.get('application/vnd.code.tree.jetbrains-commit-manager.changelist');
+    const changelistTransferItem = dataTransfer.get(DragDropMimeTypes.Changelist);
     if (changelistTransferItem) {
       try {
         const changelistIds = changelistTransferItem.value as string[];
