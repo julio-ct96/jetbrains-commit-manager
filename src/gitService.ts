@@ -55,13 +55,13 @@ export class GitService {
       // Stage the selected files according to their status so commit will succeed
       for (const file of files) {
         switch (file.status) {
-          case FileStatus.UNTRACKED:
-          case FileStatus.ADDED:
-          case FileStatus.MODIFIED:
-          case FileStatus.RENAMED:
+          case FileStatus.Untracked:
+          case FileStatus.Added:
+          case FileStatus.Modified:
+          case FileStatus.Renamed:
             await this.executeGitCommand(['add', '--', file.path]);
             break;
-          case FileStatus.DELETED:
+          case FileStatus.Deleted:
             // Stage deletion
             await this.executeGitCommand(['rm', '--', file.path]);
             break;
@@ -125,7 +125,7 @@ export class GitService {
           id: this.generateFileId(line),
           path: line,
           name: this.getFileName(line),
-          status: FileStatus.UNTRACKED,
+          status: FileStatus.Untracked,
           isSelected: false,
           relativePath: line,
         };
@@ -269,15 +269,15 @@ export class GitService {
             await this.clearLockFiles(); // Clear locks before each operation
 
             switch (file.status) {
-              case FileStatus.UNTRACKED:
+              case FileStatus.Untracked:
                 await this.executeGitCommand(['add', '--', file.path]);
                 break;
-              case FileStatus.ADDED:
-              case FileStatus.MODIFIED:
-              case FileStatus.RENAMED:
+              case FileStatus.Added:
+              case FileStatus.Modified:
+              case FileStatus.Renamed:
                 await this.executeGitCommand(['add', '--', file.path]);
                 break;
-              case FileStatus.DELETED:
+              case FileStatus.Deleted:
                 await this.executeGitCommand(['rm', '--', file.path]);
                 break;
               default:
@@ -420,22 +420,22 @@ export class GitService {
     const y = status[1];
 
     if (x === 'M' || y === 'M') {
-      return FileStatus.MODIFIED;
+      return FileStatus.Modified;
     }
     if (x === 'A' || y === 'A') {
-      return FileStatus.ADDED;
+      return FileStatus.Added;
     }
     if (x === 'D' || y === 'D') {
-      return FileStatus.DELETED;
+      return FileStatus.Deleted;
     }
     if (x === 'R' || y === 'R') {
-      return FileStatus.RENAMED;
+      return FileStatus.Renamed;
     }
     if (x === '?' || y === '?') {
-      return FileStatus.UNTRACKED;
+      return FileStatus.Untracked;
     }
 
-    return FileStatus.MODIFIED;
+    return FileStatus.Modified;
   }
 
   private getFileName(path: string): string {
