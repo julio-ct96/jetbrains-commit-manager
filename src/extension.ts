@@ -27,7 +27,7 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   // Track collapse/expand state via store API
-  treeView.onDidCollapseElement((e) => {
+  const collapseSubscription = treeView.onDidCollapseElement((e) => {
     if (e.element instanceof ChangelistTreeItem) {
       store.setChangelistExpanded(e.element.changelist.id, false);
     } else if (e.element.contextValue === ContextValues.UnversionedSection) {
@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  treeView.onDidExpandElement((e) => {
+  const expandSubscription = treeView.onDidExpandElement((e) => {
     if (e.element instanceof ChangelistTreeItem) {
       store.setChangelistExpanded(e.element.changelist.id, true);
     } else if (e.element.contextValue === ContextValues.UnversionedSection) {
@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   // Preview file on selection change
-  treeView.onDidChangeSelection((e) => {
+  const selectionSubscription = treeView.onDidChangeSelection((e) => {
     const selected = e.selection[0];
     if (selected instanceof FileTreeItem) {
       previewFileTreeItem(selected);
@@ -52,19 +52,28 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   // Handle checkbox state changes
-  treeView.onDidChangeCheckboxState((e) => {
+  const checkboxSubscription = treeView.onDidChangeCheckboxState((e) => {
     treeProvider.onDidChangeCheckboxState(e);
   });
 
   const revealChangelist = (changelistId: string) => {
-    const changelistItem = treeProvider.getChangelistTreeItemById(changelistId);
-    if (changelistItem && changelistItem.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
-      treeView.reveal(changelistItem, { expand: true, select: false, focus: false }).then(undefined, () => {});
-    }
+    const tryReveal = () => {
+      const item = treeProvider.getChangelistTreeItemById(changelistId);
+      if (!item || item.collapsibleState === vscode.TreeItemCollapsibleState.None) return;
+      return treeView.reveal(item, { expand: true, select: false, focus: false });
+    };
+
+    const result = tryReveal();
+    result?.then(undefined, () => {
+      const retry = treeProvider.onDidChangeTreeData(() => {
+        retry.dispose();
+        tryReveal()?.then(undefined, () => {});
+      });
+    });
   };
 
-  store.onChangelistCreated(revealChangelist);
-  store.onChangelistAutoExpand(revealChangelist);
+  const createdSubscription = store.onChangelistCreated(revealChangelist);
+  const autoExpandSubscription = store.onChangelistAutoExpand(revealChangelist);
 
   // Create infrastructure
   const statusBar = new StatusBarManager(store, treeView);
@@ -81,7 +90,18 @@ export function activate(context: vscode.ExtensionContext) {
 
   const commands = registerAllCommands(deps);
 
-  context.subscriptions.push(...commands, treeView, statusBar, fileWatcher);
+  context.subscriptions.push(
+    ...commands,
+    treeView,
+    statusBar,
+    fileWatcher,
+    collapseSubscription,
+    expandSubscription,
+    selectionSubscription,
+    checkboxSubscription,
+    createdSubscription,
+    autoExpandSubscription,
+  );
 
   store.refresh();
 }
