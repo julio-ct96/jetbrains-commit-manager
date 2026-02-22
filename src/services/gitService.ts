@@ -48,9 +48,7 @@ export class GitService {
 
   async commitFiles(files: FileItem[], message: string, options?: { amend?: boolean }): Promise<boolean> {
     try {
-      if (files.length === 0) {
-        throw new Error('No files selected for commit');
-      }
+      if (files.length === 0) throw new Error('No files selected for commit');
 
       // Stage the selected files according to their status so commit will succeed
       for (const file of files) {
@@ -182,9 +180,7 @@ export class GitService {
 
   async revertFiles(files: FileItem[]): Promise<boolean> {
     try {
-      if (files.length === 0) {
-        throw new Error('No files selected for revert');
-      }
+      if (files.length === 0) throw new Error('No files selected for revert');
 
       const filePaths = files.map((f) => f.path);
 
@@ -211,9 +207,7 @@ export class GitService {
 
   async stashFiles(files: FileItem[], message?: string): Promise<boolean> {
     try {
-      if (files.length === 0) {
-        throw new Error('No files selected for stash');
-      }
+      if (files.length === 0) throw new Error('No files selected for stash');
 
       // Clear any existing lock files before starting
       await this.clearLockFiles();

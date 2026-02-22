@@ -29,10 +29,8 @@ export function registerChangelistCommands(deps: CommandDependencies): vscode.Di
         changelistName = changelistItem.changelist.name;
       } else {
         const changelists = deps.store.getChangelists().filter((c) => !c.isDefault);
-        if (changelists.length === 0) {
-          vscode.window.showInformationMessage('No custom changelists to delete.');
-          return;
-        }
+        if (changelists.length === 0)
+          return void vscode.window.showInformationMessage('No custom changelists to delete.');
 
         const options = changelists.map((c) => ({ label: c.name, value: c.id }));
         const selected = await vscode.window.showQuickPick(options, {
@@ -63,10 +61,7 @@ export function registerChangelistCommands(deps: CommandDependencies): vscode.Di
         currentName = changelistItem.changelist.name;
       } else {
         const changelists = deps.store.getChangelists();
-        if (changelists.length === 0) {
-          vscode.window.showInformationMessage('No changelists to rename.');
-          return;
-        }
+        if (changelists.length === 0) return void vscode.window.showInformationMessage('No changelists to rename.');
 
         const options = changelists.map((c) => ({ label: c.name, value: c.id }));
         const selected = await vscode.window.showQuickPick(options, {
@@ -104,10 +99,8 @@ export function registerChangelistCommands(deps: CommandDependencies): vscode.Di
         ? [deps.store.getAllFiles().find((f) => f.id === fileId)].filter(Boolean)
         : deps.store.getSelectedFiles();
 
-      if (filesToMove.length === 0) {
-        vscode.window.showWarningMessage('No files selected. Please select files first.');
-        return;
-      }
+      if (filesToMove.length === 0)
+        return void vscode.window.showWarningMessage('No files selected. Please select files first.');
 
       const changelists = deps.store.getChangelists();
       const options = changelists.map((c) => ({ label: c.name, value: c.id }));

@@ -23,10 +23,8 @@ function getDefaultStashMessage(deps: CommandDependencies): string {
 async function executeStashFlow(deps: CommandDependencies, options: StashFlowOptions = {}): Promise<void> {
   const selectedFiles = deps.store.getSelectedFiles();
 
-  if (selectedFiles.length === 0) {
-    vscode.window.showWarningMessage('No files selected for stash. Please select files first.');
-    return;
-  }
+  if (selectedFiles.length === 0)
+    return void vscode.window.showWarningMessage('No files selected for stash. Please select files first.');
 
   const defaultMessage = getDefaultStashMessage(deps);
 
