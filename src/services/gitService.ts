@@ -1,8 +1,8 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { FileItem, FileStatus } from '../types';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 
 export class GitService {
   private workspaceRoot: string;

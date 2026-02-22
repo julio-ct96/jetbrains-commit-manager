@@ -10,16 +10,6 @@ import { registerFileCommands } from './fileCommands';
 import { registerMiscCommands } from './miscCommands';
 
 export { CommandDependencies };
-export {
-  registerCommitCommands,
-  registerStashCommands,
-  registerRevertCommands,
-  registerChangelistCommands,
-  registerSelectionCommands,
-  registerNavigationCommands,
-  registerFileCommands,
-  registerMiscCommands,
-};
 
 export function registerAllCommands(deps: CommandDependencies): vscode.Disposable[] {
   return [
