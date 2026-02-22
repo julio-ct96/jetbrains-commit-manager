@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import { ContextValues, ViewIds } from './constants';
 import { CommandDependencies, registerAllCommands } from './commands';
+import { ContextValues, ViewIds } from './constants';
 import { createFileWatcher, previewFileTreeItem, StatusBarManager } from './infrastructure';
+import { NativeTreeProvider } from './nativeTreeProvider';
 import { GitService } from './services';
 import { CommitStore } from './store';
-import { NativeTreeProvider } from './nativeTreeProvider';
 import { ChangelistTreeItem, FileTreeItem } from './tree-items';
 
 export function activate(context: vscode.ExtensionContext) {

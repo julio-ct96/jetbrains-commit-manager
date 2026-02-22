@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
-import { CommandDependencies } from './types';
-import { registerCommitCommands } from './commitCommands';
-import { registerStashCommands } from './stashCommands';
-import { registerRevertCommands } from './revertCommands';
 import { registerChangelistCommands } from './changelistCommands';
-import { registerSelectionCommands } from './selectionCommands';
-import { registerNavigationCommands } from './navigationCommands';
+import { registerCommitCommands } from './commitCommands';
 import { registerFileCommands } from './fileCommands';
 import { registerMiscCommands } from './miscCommands';
+import { registerNavigationCommands } from './navigationCommands';
+import { registerRevertCommands } from './revertCommands';
+import { registerSelectionCommands } from './selectionCommands';
+import { registerStashCommands } from './stashCommands';
+import { CommandDependencies } from './types';
 
 export { CommandDependencies };
 
