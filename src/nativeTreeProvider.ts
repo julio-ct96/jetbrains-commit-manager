@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { DefaultValues, DragDropMimeTypes } from './constants';
 import { CommitStore } from './store';
 import { ChangelistTreeItem, FileTreeItem, UnversionedSectionTreeItem } from './tree-items';
-import { Changelist, FileItem } from './types';
+import { Changelist } from './types';
 
 export class NativeTreeProvider
   implements vscode.TreeDataProvider<vscode.TreeItem>, vscode.TreeDragAndDropController<vscode.TreeItem>
@@ -12,14 +12,8 @@ export class NativeTreeProvider
   readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> =
     this._onDidChangeTreeData.event;
 
-  readonly dropMimeTypes = [
-    DragDropMimeTypes.TreeItem,
-    DragDropMimeTypes.Changelist,
-  ];
-  readonly dragMimeTypes = [
-    DragDropMimeTypes.TreeItem,
-    DragDropMimeTypes.Changelist,
-  ];
+  readonly dropMimeTypes = [DragDropMimeTypes.TreeItem, DragDropMimeTypes.Changelist];
+  readonly dragMimeTypes = [DragDropMimeTypes.TreeItem, DragDropMimeTypes.Changelist];
 
   private store: CommitStore;
   private workspaceRoot: string;
@@ -31,16 +25,6 @@ export class NativeTreeProvider
     this.store.onDidChange(() => {
       this._onDidChangeTreeData.fire();
     });
-  }
-
-  // --- Event forwarding from store ---
-
-  get onChangelistCreated(): vscode.Event<string> {
-    return this.store.onChangelistCreated;
-  }
-
-  get onChangelistAutoExpand(): vscode.Event<string> {
-    return this.store.onChangelistAutoExpand;
   }
 
   // --- TreeDataProvider ---
@@ -134,10 +118,7 @@ export class NativeTreeProvider
     }
 
     if (changelistIds.length > 0) {
-      dataTransfer.set(
-        DragDropMimeTypes.Changelist,
-        new vscode.DataTransferItem(changelistIds),
-      );
+      dataTransfer.set(DragDropMimeTypes.Changelist, new vscode.DataTransferItem(changelistIds));
     }
   }
 
@@ -201,27 +182,5 @@ export class NativeTreeProvider
     const changelist = this.store.getChangelists().find((c) => c.id === changelistId);
     if (!changelist) return undefined;
     return new ChangelistTreeItem(changelist, this.getCollapsibleState(changelist));
-  }
-
-  // --- Facade methods (read-only accessors for extension.ts) ---
-
-  async refresh(): Promise<void> {
-    await this.store.refresh();
-  }
-
-  getChangelists(): Changelist[] {
-    return this.store.getChangelists();
-  }
-
-  getSelectedFiles(): FileItem[] {
-    return this.store.getSelectedFiles();
-  }
-
-  getAllFiles(): FileItem[] {
-    return this.store.getAllFiles();
-  }
-
-  getUnversionedFiles(): FileItem[] {
-    return this.store.getUnversionedFiles();
   }
 }

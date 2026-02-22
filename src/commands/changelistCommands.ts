@@ -10,7 +10,8 @@ export function registerChangelistCommands(deps: CommandDependencies): vscode.Di
         placeHolder: 'e.g., Feature X',
         validateInput: (value) => {
           if (!value || value.trim().length === 0) return 'Changelist name cannot be empty';
-          if (deps.store.getChangelists().some((c) => c.name === value.trim())) return 'Changelist with this name already exists';
+          if (deps.store.getChangelists().some((c) => c.name === value.trim()))
+            return 'Changelist with this name already exists';
           return null;
         },
       });
@@ -83,7 +84,8 @@ export function registerChangelistCommands(deps: CommandDependencies): vscode.Di
         value: currentName,
         validateInput: (value) => {
           if (!value || value.trim().length === 0) return 'Changelist name cannot be empty';
-          if (deps.store.getChangelists().some((c) => c.name === value.trim() && c.id !== changelistId)) return 'Changelist with this name already exists';
+          if (deps.store.getChangelists().some((c) => c.name === value.trim() && c.id !== changelistId))
+            return 'Changelist with this name already exists';
           return null;
         },
       });

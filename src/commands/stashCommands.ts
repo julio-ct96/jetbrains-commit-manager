@@ -61,6 +61,8 @@ async function executeStashFlow(deps: CommandDependencies, options: StashFlowOpt
 export function registerStashCommands(deps: CommandDependencies): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand(CommandIds.StashSelectedFiles, () => executeStashFlow(deps)),
-    vscode.commands.registerCommand(CommandIds.StashFromStatusBar, () => executeStashFlow(deps, { fromStatusBar: true })),
+    vscode.commands.registerCommand(CommandIds.StashFromStatusBar, () =>
+      executeStashFlow(deps, { fromStatusBar: true }),
+    ),
   ];
 }

@@ -1,16 +1,6 @@
 import * as vscode from 'vscode';
 import { CommandIds, ConfigKeys, ContextKeys, ContextValues, StatusBarText, ViewIds } from './constants';
-import {
-  CommandDependencies,
-  registerCommitCommands,
-  registerStashCommands,
-  registerRevertCommands,
-  registerChangelistCommands,
-  registerSelectionCommands,
-  registerNavigationCommands,
-  registerFileCommands,
-  registerMiscCommands,
-} from './commands';
+import { CommandDependencies, registerAllCommands } from './commands';
 import { GitService } from './services';
 import { CommitStore } from './store';
 import { NativeTreeProvider } from './nativeTreeProvider';
@@ -20,6 +10,7 @@ import { FileStatus } from './types';
 let treeProvider: NativeTreeProvider;
 let treeView: vscode.TreeView<vscode.TreeItem>;
 let gitService: GitService;
+let commitStore: CommitStore;
 let commitStatusBarItem: vscode.StatusBarItem;
 let commitMessageInput: vscode.StatusBarItem;
 let isExpanded: boolean = false; // Track expand/collapse state
@@ -33,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   if (workspaceRoot) {
     gitService = new GitService(workspaceRoot);
-    const commitStore = new CommitStore(gitService);
+    commitStore = new CommitStore(gitService);
     treeProvider = new NativeTreeProvider(commitStore, workspaceRoot);
 
     // Create the tree view
@@ -55,14 +46,14 @@ export function activate(context: vscode.ExtensionContext) {
       // When user manually collapses items, update our state and the changelist state
       if (e.element instanceof ChangelistTreeItem) {
         const changelistItem = e.element as ChangelistTreeItem;
-        const changelist = treeProvider.getChangelists().find((c) => c.id === changelistItem.changelist.id);
+        const changelist = commitStore.getChangelists().find((c) => c.id === changelistItem.changelist.id);
         if (changelist) {
           changelist.isExpanded = false;
         }
       } else if (e.element.contextValue === ContextValues.UnversionedSection) {
       }
       // Check if all changelists are collapsed
-      const allCollapsed = treeProvider.getChangelists().every((c) => c.files.length === 0 || !c.isExpanded);
+      const allCollapsed = commitStore.getChangelists().every((c) => c.files.length === 0 || !c.isExpanded);
       isExpanded = !allCollapsed;
     });
 
@@ -70,14 +61,14 @@ export function activate(context: vscode.ExtensionContext) {
       // When user manually expands items, update our state and the changelist state
       if (e.element instanceof ChangelistTreeItem) {
         const changelistItem = e.element as ChangelistTreeItem;
-        const changelist = treeProvider.getChangelists().find((c) => c.id === changelistItem.changelist.id);
+        const changelist = commitStore.getChangelists().find((c) => c.id === changelistItem.changelist.id);
         if (changelist) {
           changelist.isExpanded = true;
         }
       } else if (e.element.contextValue === ContextValues.UnversionedSection) {
       }
       // Check if any changelist is expanded
-      const anyExpanded = treeProvider.getChangelists().some((c) => c.files.length > 0 && c.isExpanded);
+      const anyExpanded = commitStore.getChangelists().some((c) => c.files.length > 0 && c.isExpanded);
       isExpanded = anyExpanded;
     });
 
@@ -97,7 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Listen for new changelist creation events
-    treeProvider.onChangelistCreated(async (changelistId: string) => {
+    commitStore.onChangelistCreated(async (changelistId: string) => {
       try {
         setTimeout(async () => {
           const changelistItem = treeProvider.getChangelistTreeItemById(changelistId);
@@ -111,7 +102,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // Listen for changelist auto-expand events (when files are moved/dropped)
-    treeProvider.onChangelistAutoExpand(async (changelistId: string) => {
+    commitStore.onChangelistAutoExpand(async (changelistId: string) => {
       try {
         setTimeout(async () => {
           const changelistItem = treeProvider.getChangelistTreeItemById(changelistId);
@@ -144,31 +135,22 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     // Register all command modules
-    const commands = [
-      ...registerCommitCommands(deps),
-      ...registerStashCommands(deps),
-      ...registerRevertCommands(deps),
-      ...registerChangelistCommands(deps),
-      ...registerSelectionCommands(deps),
-      ...registerNavigationCommands(),
-      ...registerFileCommands(),
-      ...registerMiscCommands(deps),
-    ];
+    const commands = registerAllCommands(deps);
 
     context.subscriptions.push(...commands);
     context.subscriptions.push(treeView);
 
-    treeProvider.refresh();
+    commitStore.refresh();
     updateAllCommitUI();
   }
 
   // Function to update commit button context based on file selection
   function updateCommitButtonContext() {
-    const selectedFiles = treeProvider.getSelectedFiles();
+    const selectedFiles = commitStore.getSelectedFiles();
     const hasSelectedFiles = selectedFiles.length > 0;
     vscode.commands.executeCommand(CommandIds.SetContext, ContextKeys.HasSelectedFiles, hasSelectedFiles);
 
-    const stagedCount = treeProvider.getChangelists().reduce((sum, c) => sum + c.files.length, 0);
+    const stagedCount = commitStore.getChangelists().reduce((sum, c) => sum + c.files.length, 0);
     treeView.badge = stagedCount > 0 ? { value: stagedCount, tooltip: `${stagedCount} staged files` } : undefined;
   }
 
@@ -179,7 +161,7 @@ export function activate(context: vscode.ExtensionContext) {
       skipNextWatcherRefresh = false;
       return;
     }
-    if (treeProvider) {
+    if (commitStore) {
       // Auto-stage the changed file if the feature is enabled
       const config = vscode.workspace.getConfiguration(ConfigKeys.Namespace);
       const autoStageEnabled = config.get<boolean>(ConfigKeys.AutoStageFiles, true);
@@ -205,7 +187,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
-      treeProvider.refresh();
+      commitStore.refresh();
       updateAllCommitUI();
     }
   });
@@ -214,7 +196,7 @@ export function activate(context: vscode.ExtensionContext) {
       skipNextWatcherRefresh = false;
       return;
     }
-    if (treeProvider) {
+    if (commitStore) {
       // Auto-stage the new file if the feature is enabled
       const config = vscode.workspace.getConfiguration(ConfigKeys.Namespace);
       const autoStageEnabled = config.get<boolean>(ConfigKeys.AutoStageFiles, true);
@@ -240,7 +222,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
-      treeProvider.refresh();
+      commitStore.refresh();
       updateAllCommitUI();
     }
   });
@@ -249,8 +231,8 @@ export function activate(context: vscode.ExtensionContext) {
       skipNextWatcherRefresh = false;
       return;
     }
-    if (treeProvider) {
-      treeProvider.refresh();
+    if (commitStore) {
+      commitStore.refresh();
       updateAllCommitUI();
     }
   });
@@ -276,12 +258,12 @@ function createCommitStatusBarItems() {
 }
 
 function updateCommitStatusBar() {
-  if (!treeProvider) {
+  if (!commitStore) {
     return;
   }
 
-  const selectedFiles = treeProvider.getSelectedFiles();
-  const totalFiles = treeProvider.getAllFiles().length;
+  const selectedFiles = commitStore.getSelectedFiles();
+  const totalFiles = commitStore.getAllFiles().length;
 
   if (selectedFiles.length > 0) {
     commitStatusBarItem.text = `$(check) Commit (${selectedFiles.length}/${totalFiles})`;
